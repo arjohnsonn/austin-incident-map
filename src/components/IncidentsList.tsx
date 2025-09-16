@@ -223,7 +223,7 @@ export function IncidentsList({
   const [filters, setFilters] = useState<FilterState>({
     search: "",
     status: "ALL",
-    dateRange: "LAST_3_DAYS",
+    dateRange: "WEEK",
     startDate: undefined,
     endDate: undefined,
     agency: "ALL",
@@ -384,7 +384,7 @@ export function IncidentsList({
     setFilters({
       search: "",
       status: "ALL",
-      dateRange: "LAST_3_DAYS",
+      dateRange: "WEEK",
       startDate: undefined,
       endDate: undefined,
       agency: "ALL",
@@ -563,7 +563,7 @@ export function IncidentsList({
           {(filters.search ||
             filters.status !== "ALL" ||
             filters.agency !== "ALL" ||
-            filters.dateRange !== "LAST_3_DAYS" ||
+            filters.dateRange !== "WEEK" ||
             filters.startDate ||
             filters.endDate) && (
             <Button variant="ghost" size="sm" onClick={clearFilters}>
