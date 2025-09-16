@@ -43,16 +43,10 @@ const VirtualizedList = memo(
     incidents,
     selectedIncident,
     onIncidentSelect,
-    hasMoreItems,
-    loadMore,
-    allFilteredCount,
   }: {
     incidents: FireIncident[];
     selectedIncident: FireIncident | null;
     onIncidentSelect: (incident: FireIncident) => void;
-    hasMoreItems: boolean;
-    loadMore: () => void;
-    allFilteredCount: number;
   }) => {
     const [scrollTop, setScrollTop] = useState(0);
     const [containerHeight, setContainerHeight] = useState(600);
@@ -85,7 +79,6 @@ const VirtualizedList = memo(
       }
     };
 
-    const LOAD_MORE_HEIGHT = hasMoreItems ? 48 : 0;
 
     const startIndex = Math.max(
       0,
@@ -155,34 +148,6 @@ const VirtualizedList = memo(
       );
     }
 
-    // Add Load More button if it should be visible
-    if (
-      hasMoreItems &&
-      scrollTop + containerHeight >= incidents.length * ITEM_HEIGHT - 100
-    ) {
-      visibleItems.push(
-        <div
-          key="load-more"
-          className="absolute inset-x-0 flex items-center justify-center bg-white dark:bg-neutral-900 border-t border-neutral-300 dark:border-neutral-600 min-w-[800px]"
-          style={
-            {
-              "--item-top": `${incidents.length * ITEM_HEIGHT}px`,
-              "--item-height": `${LOAD_MORE_HEIGHT}px`,
-              top: "var(--item-top)",
-              height: "var(--item-height)",
-            } as React.CSSProperties
-          }
-        >
-          <button
-            onClick={loadMore}
-            className="px-4 py-2 text-sm bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 rounded border border-neutral-300 dark:border-neutral-600 transition-colors"
-          >
-            Load More ({Math.min(50, allFilteredCount - incidents.length)} more
-            incidents)
-          </button>
-        </div>
-      );
-    }
 
     return (
       <div className="flex flex-col h-full">
@@ -230,10 +195,8 @@ export function IncidentsList({
   });
 
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
-  const [displayCount, setDisplayCount] = useState(100);
   const [currentTime, setCurrentTime] = useState(new Date());
 
-  const ITEMS_PER_PAGE = 100;
 
   const getDateRange = useCallback((range: DateRange) => {
     const now = new Date();
@@ -328,43 +291,15 @@ export function IncidentsList({
     return filtered;
   }, [incidents, filters, getDateRange]);
 
-  // Get the currently displayed incidents with balanced mix
+  // Get all filtered incidents sorted by date (newest first)
   const displayedIncidents = useMemo(() => {
-    // Create a balanced mix of fire and traffic incidents
-    const fireIncidents = allFilteredIncidents.filter(
-      (i) => i.incidentType === "fire"
-    );
-    const trafficIncidents = allFilteredIncidents.filter(
-      (i) => i.incidentType === "traffic"
-    );
-
-    const halfCount = Math.floor(displayCount / 2);
-    const fireSlice = fireIncidents.slice(0, halfCount);
-    const trafficSlice = trafficIncidents.slice(0, halfCount);
-
-    // Combine and sort by date (newest first)
-    const mixed = [...fireSlice, ...trafficSlice].sort(
+    return allFilteredIncidents.sort(
       (a, b) =>
         new Date(b.published_date).getTime() -
         new Date(a.published_date).getTime()
     );
+  }, [allFilteredIncidents]);
 
-    // If we don't have enough of one type, fill with the other type
-    if (mixed.length < displayCount) {
-      const remaining = displayCount - mixed.length;
-      const allRemaining = allFilteredIncidents.filter(
-        (i) => !mixed.some((m) => m.traffic_report_id === i.traffic_report_id)
-      );
-      mixed.push(...allRemaining.slice(0, remaining));
-    }
-
-    return mixed.slice(0, displayCount);
-  }, [allFilteredIncidents, displayCount]);
-
-  // Reset display count when filters change
-  useEffect(() => {
-    setDisplayCount(ITEMS_PER_PAGE);
-  }, [filters, ITEMS_PER_PAGE]);
 
   // Notify parent of displayed incidents changes
   useEffect(() => {
@@ -391,11 +326,6 @@ export function IncidentsList({
     });
   };
 
-  const loadMore = () => {
-    setDisplayCount((prev) => prev + ITEMS_PER_PAGE);
-  };
-
-  const hasMoreItems = displayCount < allFilteredIncidents.length;
 
   // Update current time every second for real-time "time ago" display
   useEffect(() => {
@@ -454,8 +384,7 @@ export function IncidentsList({
               Refresh
             </Button>
             <span className="bg-neutral-200 dark:bg-neutral-700 px-2 py-1 rounded text-xs font-medium">
-              {displayedIncidents.length} of {allFilteredIncidents.length}{" "}
-              incidents
+              {displayedIncidents.length} incidents
             </span>
           </div>
         </div>
@@ -586,9 +515,6 @@ export function IncidentsList({
             incidents={displayedIncidents}
             selectedIncident={selectedIncident}
             onIncidentSelect={onIncidentSelect}
-            hasMoreItems={hasMoreItems}
-            loadMore={loadMore}
-            allFilteredCount={allFilteredIncidents.length}
           />
         )}
       </div>
