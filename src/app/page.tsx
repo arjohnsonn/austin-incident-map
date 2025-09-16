@@ -18,14 +18,6 @@ export default function Home() {
     setDisplayedIncidents(incidents);
   }, []);
 
-  // Initialize displayedIncidents with all incidents when first loaded
-  useEffect(() => {
-    if (incidents.length > 0 && displayedIncidents.length === 0) {
-      // Since data is now ordered by date descending, just take the first 100 for initial display
-      // The filtering component will handle showing the right mix based on date ranges
-      setDisplayedIncidents(incidents.slice(0, 100));
-    }
-  }, [incidents, displayedIncidents.length]);
 
   // Show toast when manual refresh completes
   useEffect(() => {
