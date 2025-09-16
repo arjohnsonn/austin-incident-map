@@ -244,28 +244,43 @@ export function IncidentMap({
 
   // Add user location marker
   useEffect(() => {
-    if (!map.current || !userLocation) return;
+    if (!map.current || !mapLoaded || !userLocation) return;
 
     console.log('Creating user location marker at:', userLocation);
 
     // Remove existing user location marker
     if (userLocationMarker.current) {
       userLocationMarker.current.remove();
+      userLocationMarker.current = null;
     }
 
-    // Create user location marker element
-    const userMarkerEl = document.createElement("div");
-    userMarkerEl.className = "user-location-marker";
+    // Wait for map to be ready, then add marker
+    const addUserMarker = () => {
+      if (!map.current || !userLocation) return;
 
-    // Create and add the marker
-    userLocationMarker.current = new maplibregl.Marker({
-      element: userMarkerEl,
-      anchor: "center",
-    })
-      .setLngLat([userLocation.lng, userLocation.lat])
-      .addTo(map.current);
+      // Create user location marker element following the same pattern as incident markers
+      const userMarkerEl = document.createElement("div");
+      userMarkerEl.className = "w-4 h-4 rounded-full border-2 cursor-pointer border-white bg-blue-500 user-location-marker";
+      userMarkerEl.style.transformOrigin = "center center";
 
-    console.log('User location marker added to map');
+      // Create and add the marker with the same configuration as incident markers
+      userLocationMarker.current = new maplibregl.Marker({
+        element: userMarkerEl,
+        anchor: "center",
+      })
+        .setLngLat([userLocation.lng, userLocation.lat])
+        .addTo(map.current);
+
+      console.log('User location marker added to map at:', [userLocation.lng, userLocation.lat]);
+    };
+
+    // Add marker immediately if map is loaded
+    if (map.current.loaded()) {
+      addUserMarker();
+    } else {
+      // Wait for map to load
+      map.current.once('idle', addUserMarker);
+    }
 
     return () => {
       if (userLocationMarker.current) {
@@ -273,7 +288,7 @@ export function IncidentMap({
         userLocationMarker.current = null;
       }
     };
-  }, [userLocation]);
+  }, [userLocation, mapLoaded, resolvedTheme]);
 
   // Group incidents by location to handle clustering
   const groupIncidentsByLocation = (incidents: FireIncident[]) => {
