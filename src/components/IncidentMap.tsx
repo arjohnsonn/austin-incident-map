@@ -238,14 +238,30 @@ export function IncidentMap({
       );
       const isCluster = group.length > 1;
 
-      // Determine predominant incident type for cluster coloring
-      const fireCount = group.filter(
+      // Determine predominant incident type for cluster coloring based on ACTIVE incidents only
+      const activeIncidents = group.filter(
+        (inc) => inc.traffic_report_status === "ACTIVE"
+      );
+      const activeFireCount = activeIncidents.filter(
         (inc) => (inc.incidentType || "fire") === "fire"
       ).length;
-      const trafficCount = group.filter(
+      const activeTrafficCount = activeIncidents.filter(
         (inc) => (inc.incidentType || "fire") === "traffic"
       ).length;
-      const predominantType = fireCount >= trafficCount ? "fire" : "traffic";
+
+      // If there are active incidents, use their predominant type, otherwise fall back to all incidents
+      let predominantType = "fire"; // default
+      if (activeIncidents.length > 0) {
+        predominantType = activeFireCount >= activeTrafficCount ? "fire" : "traffic";
+      } else {
+        const fireCount = group.filter(
+          (inc) => (inc.incidentType || "fire") === "fire"
+        ).length;
+        const trafficCount = group.filter(
+          (inc) => (inc.incidentType || "fire") === "traffic"
+        ).length;
+        predominantType = fireCount >= trafficCount ? "fire" : "traffic";
+      }
 
       // Create marker element
       const markerEl = document.createElement("div");
