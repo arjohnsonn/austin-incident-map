@@ -5,12 +5,9 @@ import { format } from 'date-fns';
 import { Search, Calendar } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { FireIncident, FilterState, IncidentStatus } from '@/types/incident';
 
 interface IncidentsListProps {
@@ -20,8 +17,8 @@ interface IncidentsListProps {
   onDisplayedIncidentsChange?: (incidents: FireIncident[]) => void;
 }
 
-const ITEM_HEIGHT = 140;
-const BUFFER_SIZE = 5;
+const ITEM_HEIGHT = 32;
+const BUFFER_SIZE = 10;
 
 const VirtualizedList = memo(({
   incidents,
@@ -84,47 +81,55 @@ const VirtualizedList = memo(({
           right: 0,
           height: ITEM_HEIGHT,
         }}
-        className="px-4 py-1.5"
+        className={`cursor-pointer transition-colors border-b border-neutral-300 dark:border-neutral-600 hover:bg-neutral-100 dark:hover:bg-neutral-700 ${
+          isSelected
+            ? 'bg-blue-200 dark:bg-blue-800'
+            : i % 2 === 0
+              ? 'bg-neutral-50 dark:bg-neutral-900'
+              : 'bg-white dark:bg-neutral-800'
+        }`}
+        onClick={() => onIncidentSelect(incident)}
       >
-        <Card
-          className={`cursor-pointer transition-all hover:shadow-md h-full ${
-            isSelected ? 'ring-2 ring-blue-500 bg-blue-50' : ''
-          }`}
-          onClick={() => onIncidentSelect(incident)}
-        >
-          <CardContent className="p-4">
-            <div className="space-y-2">
-              <div className="flex items-start justify-between">
-                <h3 className="font-medium text-sm leading-tight">
-                  {incident.issue_reported}
-                </h3>
-                <Badge
-                  variant={incident.traffic_report_status === 'ACTIVE' ? 'destructive' : 'secondary'}
-                  className="text-xs"
-                >
-                  {incident.traffic_report_status}
-                </Badge>
-              </div>
-
-              <div className="text-sm text-gray-600">
-                {incident.address}
-              </div>
-
-              <div className="flex items-center justify-between text-xs text-gray-500">
-                <span>{incident.agency}</span>
-                <span>{formatDate(incident.published_date)}</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="flex items-center h-full px-2 text-xs">
+          <div className="flex-1 px-2 truncate font-medium">
+            {incident.issue_reported}
+          </div>
+          <div className="w-48 px-2 truncate text-neutral-600 dark:text-neutral-400">
+            {incident.address}
+          </div>
+          <div className="w-16 text-center">
+            <span
+              className={`inline-block px-2 py-1 text-xs font-bold rounded ${
+                incident.traffic_report_status === 'ACTIVE'
+                  ? 'bg-red-600 text-white'
+                  : 'bg-neutral-500 text-white'
+              }`}
+            >
+              {incident.traffic_report_status === 'ACTIVE' ? 'ACTIVE' : 'CLOSED'}
+            </span>
+          </div>
+          <div className="w-20 text-center text-neutral-500 dark:text-neutral-400 font-mono">
+            {formatDate(incident.published_date).split(',')[1]?.trim() || formatDate(incident.published_date)}
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div ref={containerRef} className="flex-1 overflow-hidden">
+    <div ref={containerRef} className="flex-1 overflow-hidden flex flex-col">
+      {/* Table Header */}
+      <div className="bg-neutral-900 dark:bg-black text-white text-xs font-bold px-2 py-2 border-b-2 border-neutral-600">
+        <div className="flex items-center">
+          <div className="flex-1 px-2">CALL TITLE</div>
+          <div className="w-48 px-2">ADDRESS</div>
+          <div className="w-16 text-center">STATUS</div>
+          <div className="w-20 text-center">TIME</div>
+        </div>
+      </div>
+
       <div
-        className="overflow-auto h-full"
+        className="overflow-auto flex-1"
         onScroll={handleScroll}
       >
         <div
@@ -246,9 +251,9 @@ export function IncidentsList({ incidents, selectedIncident, onIncidentSelect, o
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Fire Incidents</h2>
           <div className="flex items-center gap-2">
-            <Badge variant="secondary">
+            <span className="bg-neutral-200 dark:bg-neutral-700 px-2 py-1 rounded text-xs font-medium">
               {displayedIncidents.length} of {allFilteredIncidents.length} incidents
-            </Badge>
+            </span>
           </div>
         </div>
 
