@@ -53,6 +53,7 @@ export function useFireIncidents() {
   const [incidents, setIncidents] = useState<FireIncident[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -60,6 +61,7 @@ export function useFireIncidents() {
       setError(null);
       const data = await fetchFireIncidents();
       setIncidents(data);
+      setLastUpdated(new Date());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch data');
     } finally {
@@ -70,11 +72,11 @@ export function useFireIncidents() {
   useEffect(() => {
     fetchData();
 
-    // Refresh every 5 minutes
-    const interval = setInterval(fetchData, 5 * 60 * 1000);
+    // Refresh every 1 minute
+    const interval = setInterval(fetchData, 1 * 60 * 1000);
 
     return () => clearInterval(interval);
   }, [fetchData]);
 
-  return { incidents, loading, error, refetch: fetchData };
+  return { incidents, loading, error, lastUpdated, refetch: fetchData };
 }

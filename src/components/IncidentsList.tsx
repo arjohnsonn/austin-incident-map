@@ -2,7 +2,7 @@
 
 import { useState, useMemo, memo, useRef, useEffect, useCallback } from 'react';
 import { format } from 'date-fns';
-import { Search, Calendar } from 'lucide-react';
+import { Search, Calendar, RefreshCw } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -15,6 +15,9 @@ interface IncidentsListProps {
   selectedIncident: FireIncident | null;
   onIncidentSelect: (incident: FireIncident) => void;
   onDisplayedIncidentsChange?: (incidents: FireIncident[]) => void;
+  loading?: boolean;
+  lastUpdated?: Date | null;
+  onRefresh?: () => void;
 }
 
 const ITEM_HEIGHT = 32;
@@ -180,7 +183,7 @@ const VirtualizedList = memo(({
 
 VirtualizedList.displayName = 'VirtualizedList';
 
-export function IncidentsList({ incidents, selectedIncident, onIncidentSelect, onDisplayedIncidentsChange }: IncidentsListProps) {
+export function IncidentsList({ incidents, selectedIncident, onIncidentSelect, onDisplayedIncidentsChange, loading, lastUpdated, onRefresh }: IncidentsListProps) {
   const [filters, setFilters] = useState<FilterState>({
     search: '',
     status: 'ALL',
@@ -328,14 +331,45 @@ export function IncidentsList({ incidents, selectedIncident, onIncidentSelect, o
 
   const hasMoreItems = displayCount < allFilteredIncidents.length;
 
+  const getTimeSinceUpdate = () => {
+    if (!lastUpdated) return '';
+    const now = new Date();
+    const diffMs = now.getTime() - lastUpdated.getTime();
+    const diffMinutes = Math.floor(diffMs / (1000 * 60));
+
+    if (diffMinutes < 1) return 'Just now';
+    if (diffMinutes === 1) return '1 minute ago';
+    if (diffMinutes < 60) return `${diffMinutes} minutes ago`;
+
+    const diffHours = Math.floor(diffMinutes / 60);
+    if (diffHours === 1) return '1 hour ago';
+    return `${diffHours} hours ago`;
+  };
 
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="p-4 border-b space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Incidents</h2>
+          <div>
+            <h2 className="text-lg font-semibold">Incidents</h2>
+            {lastUpdated && (
+              <p className="text-xs text-muted-foreground">
+                Last updated: {getTimeSinceUpdate()}
+              </p>
+            )}
+          </div>
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onRefresh}
+              disabled={loading}
+              className="gap-2"
+            >
+              <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
             <span className="bg-neutral-200 dark:bg-neutral-700 px-2 py-1 rounded text-xs font-medium">
               {displayedIncidents.length} of {allFilteredIncidents.length} incidents
             </span>

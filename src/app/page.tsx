@@ -9,7 +9,7 @@ import { useFireIncidents } from '@/lib/api';
 import { FireIncident } from '@/types/incident';
 
 export default function Home() {
-  const { incidents, loading, error } = useFireIncidents();
+  const { incidents, loading, error, lastUpdated, refetch } = useFireIncidents();
   const [selectedIncident, setSelectedIncident] = useState<FireIncident | null>(null);
   const [displayedIncidents, setDisplayedIncidents] = useState<FireIncident[]>([]);
 
@@ -63,6 +63,9 @@ export default function Home() {
             selectedIncident={selectedIncident}
             onIncidentSelect={setSelectedIncident}
             onDisplayedIncidentsChange={handleDisplayedIncidentsChange}
+            loading={loading}
+            lastUpdated={lastUpdated}
+            onRefresh={refetch}
           />
         </ResizablePanel>
 
