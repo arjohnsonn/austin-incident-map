@@ -29,41 +29,13 @@ export function IncidentMap({
     const isDark = resolvedTheme === "dark";
 
     style.textContent = `
-      @keyframes pulse-ring {
-        0% {
-          transform: translate(-50%, -50%) scale(1);
-          opacity: 0.7;
-        }
-        100% {
-          transform: translate(-50%, -50%) scale(4);
-          opacity: 0;
-        }
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
       }
 
       .active-marker {
-        position: relative;
-      }
-
-      .active-marker::before {
-        content: '';
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        width: 100%;
-        height: 100%;
-        border-radius: 50%;
-        background-color: var(--pulse-color, #dc2626);
-        animation: pulse-ring 1.5s infinite;
-        pointer-events: none;
-        z-index: -1;
-      }
-
-      .active-fire-marker::before {
-        --pulse-color: #dc2626;
-      }
-
-      .active-traffic-marker::before {
-        --pulse-color: #eab308;
+        animation: pulse 1.5s infinite;
       }
 
       /* Popup styling with maximum specificity */
@@ -257,17 +229,15 @@ export function IncidentMap({
             ? {
                 bg: "bg-red-600",
                 border: "border-red-800",
-                pulseClass: "active-fire-marker",
               }
             : {
                 bg: "bg-yellow-500",
                 border: "border-yellow-700",
-                pulseClass: "active-traffic-marker",
               };
 
         markerEl.className = `relative rounded-full cursor-pointer flex items-center justify-center text-white text-xs font-bold ${
           hasActiveIncidents
-            ? `w-6 h-6 ${colors.bg} border-2 ${colors.border} active-marker ${colors.pulseClass}`
+            ? `w-6 h-6 ${colors.bg} border-2 ${colors.border} active-marker`
             : "w-6 h-6 bg-neutral-600 border-2 border-neutral-800"
         }`;
         markerEl.textContent = group.length.toString();
@@ -280,18 +250,10 @@ export function IncidentMap({
         if (isActive) {
           const colors =
             incidentType === "fire"
-              ? {
-                  border: "border-red-600",
-                  bg: "bg-red-600",
-                  pulseClass: "active-fire-marker",
-                }
-              : {
-                  border: "border-yellow-500",
-                  bg: "bg-yellow-500",
-                  pulseClass: "active-traffic-marker",
-                };
+              ? "border-red-600 bg-red-600"
+              : "border-yellow-500 bg-yellow-500";
 
-          markerEl.className = `w-4 h-4 rounded-full border-2 cursor-pointer ${colors.border} ${colors.bg} active-marker ${colors.pulseClass}`;
+          markerEl.className = `w-4 h-4 rounded-full border-2 cursor-pointer ${colors} active-marker`;
         } else {
           markerEl.className =
             "w-4 h-4 rounded-full border-2 cursor-pointer border-neutral-600 bg-neutral-400";
