@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
-import { FireMap } from '@/components/FireMap';
+import { IncidentMap } from '@/components/IncidentMap';
 import { IncidentsList } from '@/components/IncidentsList';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { useFireIncidents } from '@/lib/api';
@@ -20,14 +20,16 @@ export default function Home() {
   // Initialize displayedIncidents with all incidents when first loaded
   useEffect(() => {
     if (incidents.length > 0 && displayedIncidents.length === 0) {
-      setDisplayedIncidents(incidents.slice(0, 50)); // Match initial display count
+      // Since data is now ordered by date descending, just take the first 50 for initial display
+      // The filtering component will handle showing the right mix based on date ranges
+      setDisplayedIncidents(incidents.slice(0, 50));
     }
   }, [incidents, displayedIncidents.length]);
 
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="text-lg">Loading fire incidents...</div>
+        <div className="text-lg">Loading incidents...</div>
       </div>
     );
   }
@@ -45,9 +47,9 @@ export default function Home() {
       <header className="border-b px-6 py-4">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold">Austin Fire Incidents Map</h1>
+            <h1 className="text-2xl font-bold">Austin Incident Map</h1>
             <p className="text-muted-foreground">
-              Real-time fire, rescue, and hazmat incidents in Austin and Travis County
+              Real-time fire, rescue, hazmat, and traffic incidents in Austin and Travis County
             </p>
           </div>
           <ThemeToggle />
@@ -55,7 +57,7 @@ export default function Home() {
       </header>
 
       <ResizablePanelGroup direction="horizontal" className="flex-1">
-        <ResizablePanel defaultSize={40} minSize={30}>
+        <ResizablePanel defaultSize={60} minSize={40}>
           <IncidentsList
             incidents={incidents}
             selectedIncident={selectedIncident}
@@ -66,8 +68,8 @@ export default function Home() {
 
         <ResizableHandle withHandle />
 
-        <ResizablePanel defaultSize={60} minSize={50}>
-          <FireMap
+        <ResizablePanel defaultSize={40} minSize={30}>
+          <IncidentMap
             incidents={displayedIncidents}
             selectedIncident={selectedIncident}
             onIncidentSelect={setSelectedIncident}

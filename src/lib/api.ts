@@ -1,24 +1,50 @@
 import { useState, useEffect, useCallback } from 'react';
 import { FireIncident } from '@/types/incident';
 
-const API_ENDPOINT = 'https://data.austintexas.gov/resource/wpu4-x69d.json';
+// Get data from the last week, ordered by published_date descending (newest first)
+const FIRE_API_ENDPOINT = 'https://data.austintexas.gov/resource/wpu4-x69d.json?$order=published_date DESC&$limit=2000';
+const TRAFFIC_API_ENDPOINT = 'https://data.austintexas.gov/resource/dx9v-zd7x.json?$order=published_date DESC&$limit=2000';
 
 export async function fetchFireIncidents(): Promise<FireIncident[]> {
   try {
-    const response = await fetch(API_ENDPOINT, {
-      headers: {
-        'Accept': 'application/json',
-      },
-    });
+    const [fireResponse, trafficResponse] = await Promise.all([
+      fetch(FIRE_API_ENDPOINT, {
+        headers: {
+          'Accept': 'application/json',
+        },
+      }),
+      fetch(TRAFFIC_API_ENDPOINT, {
+        headers: {
+          'Accept': 'application/json',
+        },
+      })
+    ]);
 
-    if (!response.ok) {
-      throw new Error(`Failed to fetch fire incidents: ${response.statusText}`);
+    if (!fireResponse.ok) {
+      throw new Error(`Failed to fetch fire incidents: ${fireResponse.statusText}`);
+    }
+    if (!trafficResponse.ok) {
+      throw new Error(`Failed to fetch traffic incidents: ${trafficResponse.statusText}`);
     }
 
-    const data = await response.json();
-    return data as FireIncident[];
+    const [fireData, trafficData] = await Promise.all([
+      fireResponse.json(),
+      trafficResponse.json()
+    ]);
+
+    const fireIncidents = (fireData as any[]).map(incident => ({
+      ...incident,
+      incidentType: 'fire' as const
+    }));
+
+    const trafficIncidents = (trafficData as any[]).map(incident => ({
+      ...incident,
+      incidentType: 'traffic' as const
+    }));
+
+    return [...fireIncidents, ...trafficIncidents];
   } catch (error) {
-    console.error('Error fetching fire incidents:', error);
+    console.error('Error fetching incidents:', error);
     throw error;
   }
 }

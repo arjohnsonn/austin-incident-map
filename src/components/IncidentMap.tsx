@@ -6,13 +6,13 @@ import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { FireIncident } from '@/types/incident';
 
-interface FireMapProps {
+interface IncidentMapProps {
   incidents: FireIncident[];
   selectedIncident: FireIncident | null;
   onIncidentSelect: (incident: FireIncident) => void;
 }
 
-export function FireMap({ incidents, selectedIncident, onIncidentSelect }: FireMapProps) {
+export function IncidentMap({ incidents, selectedIncident, onIncidentSelect }: IncidentMapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const markers = useRef<Map<string, maplibregl.Marker>>(new Map());
@@ -46,10 +46,18 @@ export function FireMap({ incidents, selectedIncident, onIncidentSelect }: FireM
         width: 100%;
         height: 100%;
         border-radius: 50%;
-        background-color: #dc2626;
+        background-color: var(--pulse-color, #dc2626);
         animation: pulse-ring 1.5s infinite;
         pointer-events: none;
         z-index: -1;
+      }
+
+      .active-fire-marker::before {
+        --pulse-color: #dc2626;
+      }
+
+      .active-traffic-marker::before {
+        --pulse-color: #eab308;
       }
     `;
     document.head.appendChild(style);
@@ -179,14 +187,23 @@ export function FireMap({ incidents, selectedIncident, onIncidentSelect }: FireM
       const hasActiveIncidents = group.some(inc => inc.traffic_report_status === 'ACTIVE');
       const isCluster = group.length > 1;
 
+      // Determine predominant incident type for cluster coloring
+      const fireCount = group.filter(inc => (inc.incidentType || 'fire') === 'fire').length;
+      const trafficCount = group.filter(inc => (inc.incidentType || 'fire') === 'traffic').length;
+      const predominantType = fireCount >= trafficCount ? 'fire' : 'traffic';
+
       // Create marker element
       const markerEl = document.createElement('div');
 
       if (isCluster) {
-        // Cluster marker with count
+        // Cluster marker with count - color based on predominant type
+        const colors = predominantType === 'fire'
+          ? { bg: 'bg-red-600', border: 'border-red-800', pulseClass: 'active-fire-marker' }
+          : { bg: 'bg-yellow-500', border: 'border-yellow-700', pulseClass: 'active-traffic-marker' };
+
         markerEl.className = `relative rounded-full cursor-pointer flex items-center justify-center text-white text-xs font-bold ${
           hasActiveIncidents
-            ? 'w-6 h-6 bg-red-600 border-2 border-red-800 active-marker'
+            ? `w-6 h-6 ${colors.bg} border-2 ${colors.border} active-marker ${colors.pulseClass}`
             : 'w-6 h-6 bg-gray-600 border-2 border-gray-800'
         }`;
         markerEl.textContent = group.length.toString();
@@ -194,24 +211,21 @@ export function FireMap({ incidents, selectedIncident, onIncidentSelect }: FireM
         // Single incident marker
         const incident = firstIncident;
         const isActive = incident.traffic_report_status === 'ACTIVE';
+        const incidentType = incident.incidentType || 'fire';
 
-        markerEl.className = `w-4 h-4 rounded-full border-2 cursor-pointer ${
-          isActive
-            ? 'border-red-600 bg-red-600 active-marker'
-            : 'border-gray-600 bg-gray-400'
-        }`;
+        if (isActive) {
+          const colors = incidentType === 'fire'
+            ? { border: 'border-red-600', bg: 'bg-red-600', pulseClass: 'active-fire-marker' }
+            : { border: 'border-yellow-500', bg: 'bg-yellow-500', pulseClass: 'active-traffic-marker' };
+
+          markerEl.className = `w-4 h-4 rounded-full border-2 cursor-pointer ${colors.border} ${colors.bg} active-marker ${colors.pulseClass}`;
+        } else {
+          markerEl.className = 'w-4 h-4 rounded-full border-2 cursor-pointer border-gray-600 bg-gray-400';
+        }
       }
 
       // Add hover effects without interfering with positioning
       markerEl.style.transformOrigin = 'center center';
-
-      console.log('🎯 Creating marker:', {
-        position: { lng, lat },
-        isCluster,
-        groupSize: group.length,
-        element: markerEl.className,
-        transformOrigin: markerEl.style.transformOrigin
-      });
 
       const marker = new maplibregl.Marker({
         element: markerEl,
@@ -219,8 +233,6 @@ export function FireMap({ incidents, selectedIncident, onIncidentSelect }: FireM
       })
         .setLngLat([lng, lat])
         .addTo(map.current!);
-
-      console.log('✅ Marker created successfully');
 
       // Create popup content based on cluster or single incident
       let popupContent = '';
@@ -281,14 +293,6 @@ export function FireMap({ incidents, selectedIncident, onIncidentSelect }: FireM
         .setLngLat([lng, lat])
         .setHTML(popupContent);
 
-      console.log('🎪 Popup created:', {
-        position: [lng, lat],
-        contentLength: popupContent.length,
-        hasContent: popupContent.trim().length > 0,
-        isCluster,
-        groupSize: group.length
-      });
-
       // Event handlers
       let hoverTimeout: NodeJS.Timeout;
       let isClicked = false;
@@ -316,16 +320,8 @@ export function FireMap({ incidents, selectedIncident, onIncidentSelect }: FireM
 
       // Hover handlers
       markerEl.addEventListener('mouseenter', () => {
-        console.log('🔍 HOVER ENTER:', {
-          isClicked,
-          currentTransform: markerEl.style.transform,
-          position: { lng, lat },
-          markerId: isCluster ? `cluster_${lng}_${lat}` : firstIncident.traffic_report_id
-        });
-
         // Don't interfere if recently clicked
         if (isClicked) {
-          console.log('❌ Skipping hover - recently clicked');
           return;
         }
 
@@ -337,40 +333,19 @@ export function FireMap({ incidents, selectedIncident, onIncidentSelect }: FireM
         const positionTransform = positionMatch ? positionMatch[0] : '';
 
         markerEl.style.transform = `${positionTransform} scale(1.2)`;
-        console.log('📐 Transform change:', {
-          before: beforeTransform,
-          after: markerEl.style.transform,
-          positionPart: positionTransform,
-          computedTransform: window.getComputedStyle(markerEl).transform,
-          offsetPosition: { left: markerEl.offsetLeft, top: markerEl.offsetTop }
-        });
 
         // Popup with delay (only if not clicked)
         clearTimeout(hoverTimeout);
         hoverTimeout = setTimeout(() => {
           if (!isClicked) {
-            console.log('💬 Adding popup to map:', {
-              mapExists: !!map.current,
-              popupElement: popup.getElement(),
-              popupLngLat: popup.getLngLat()
-            });
             popup.addTo(map.current!);
-            console.log('💬 Popup added, isOpen:', popup.isOpen());
-          } else {
-            console.log('💬 Skipping popup - was clicked');
           }
-        }, 200); // Reduced delay from 300ms to 200ms
+        }, 200);
       });
 
       markerEl.addEventListener('mouseleave', () => {
-        console.log('🔍 HOVER LEAVE:', {
-          isClicked,
-          currentTransform: markerEl.style.transform
-        });
-
         // Don't interfere if recently clicked
         if (isClicked) {
-          console.log('❌ Skipping leave - recently clicked');
           return;
         }
 
@@ -382,22 +357,11 @@ export function FireMap({ incidents, selectedIncident, onIncidentSelect }: FireM
         const positionTransform = positionMatch ? positionMatch[0] : '';
 
         markerEl.style.transform = `${positionTransform} scale(1)`;
-        console.log('📐 Reset transform:', {
-          before: beforeTransform,
-          after: markerEl.style.transform,
-          positionPart: positionTransform,
-          computedTransform: window.getComputedStyle(markerEl).transform,
-          offsetPosition: { left: markerEl.offsetLeft, top: markerEl.offsetTop }
-        });
 
         // Remove popup (only if not clicked)
         clearTimeout(hoverTimeout);
         if (!isClicked) {
-          console.log('💬 Removing popup, was open:', popup.isOpen());
           popup.remove();
-          console.log('💬 Popup removed, still open:', popup.isOpen());
-        } else {
-          console.log('💬 Not removing popup - was clicked');
         }
       });
 

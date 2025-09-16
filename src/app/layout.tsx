@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Austin Fire Incidents Map",
-  description: "Real-time fire, rescue, and hazmat incidents in Austin and Travis County",
+  title: "Austin Incident Map",
+  description: "Real-time fire, rescue, hazmat, and traffic incidents in Austin and Travis County",
 };
 
 export default function RootLayout({

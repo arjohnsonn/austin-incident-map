@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
-import { FireIncident, FilterState, IncidentStatus } from '@/types/incident';
+import { FireIncident, FilterState, IncidentStatus, DateRange } from '@/types/incident';
 
 interface IncidentsListProps {
   incidents: FireIncident[];
@@ -60,7 +60,7 @@ const VirtualizedList = memo(({
 
   const formatDate = (dateString: string) => {
     try {
-      return format(new Date(dateString), 'MMM dd, HH:mm');
+      return format(new Date(dateString), 'MM/dd HH:mm');
     } catch {
       return 'Invalid date';
     }
@@ -83,7 +83,7 @@ const VirtualizedList = memo(({
     visibleItems.push(
       <div
         key={incident.traffic_report_id}
-        className={`absolute inset-x-0 cursor-pointer transition-colors border-b border-neutral-300 dark:border-neutral-600 hover:bg-neutral-100 dark:hover:bg-neutral-700 ${
+        className={`absolute left-0 right-0 cursor-pointer transition-colors border-b border-neutral-300 dark:border-neutral-600 hover:bg-neutral-100 dark:hover:bg-neutral-700 min-w-[800px] ${
           isSelected
             ? 'bg-blue-200 dark:bg-blue-800'
             : i % 2 === 0
@@ -99,25 +99,30 @@ const VirtualizedList = memo(({
         onClick={() => onIncidentSelect(incident)}
       >
         <div className="flex items-center h-full px-2 text-xs">
-          <div className="flex-1 px-2 truncate font-medium">
+          <div className="w-20 text-center text-neutral-500 dark:text-neutral-400 font-mono">
+            {formatDate(incident.published_date)}
+          </div>
+          <div className="w-42 px-2 truncate font-medium">
             {incident.issue_reported}
           </div>
           <div className="w-48 px-2 truncate text-neutral-600 dark:text-neutral-400">
             {incident.address}
           </div>
+          <div className="w-24 px-2 truncate text-neutral-600 dark:text-neutral-400 text-center">
+            {incident.agency?.trim() || 'Unknown'}
+          </div>
           <div className="w-16 text-center">
             <span
               className={`inline-block px-2 py-1 text-xs font-bold rounded ${
                 incident.traffic_report_status === 'ACTIVE'
-                  ? 'bg-red-600 text-white'
+                  ? (incident.incidentType || 'fire') === 'fire'
+                    ? 'bg-red-600 text-white'
+                    : 'bg-yellow-500 text-white'
                   : 'bg-neutral-500 text-white'
               }`}
             >
               {incident.traffic_report_status === 'ACTIVE' ? 'ACTIVE' : 'CLOSED'}
             </span>
-          </div>
-          <div className="w-20 text-center text-neutral-500 dark:text-neutral-400 font-mono">
-            {formatDate(incident.published_date).split(',')[1]?.trim() || formatDate(incident.published_date)}
           </div>
         </div>
       </div>
@@ -129,7 +134,7 @@ const VirtualizedList = memo(({
     visibleItems.push(
       <div
         key="load-more"
-        className="absolute inset-x-0 flex items-center justify-center bg-white dark:bg-neutral-900 border-t border-neutral-300 dark:border-neutral-600"
+        className="absolute inset-x-0 flex items-center justify-center bg-white dark:bg-neutral-900 border-t border-neutral-300 dark:border-neutral-600 min-w-[800px]"
         style={{
           '--item-top': `${incidents.length * ITEM_HEIGHT}px`,
           '--item-height': `${LOAD_MORE_HEIGHT}px`,
@@ -149,23 +154,23 @@ const VirtualizedList = memo(({
 
   return (
     <div className="flex flex-col h-full">
-      {/* Table Header */}
-      <div className="bg-neutral-900 dark:bg-black text-white text-xs font-bold px-2 py-2 border-b-2 border-neutral-600 flex-shrink-0">
-        <div className="flex items-center">
-          <div className="flex-1 px-2">CALL TITLE</div>
-          <div className="w-48 px-2">ADDRESS</div>
-          <div className="w-16 text-center">STATUS</div>
-          <div className="w-20 text-center">TIME</div>
-        </div>
-      </div>
-
       <div
         ref={containerRef}
-        className="flex-1 overflow-auto"
+        className="flex-1 overflow-auto overflow-x-auto"
         onScroll={handleScroll}
       >
-        <div
-          className="relative">
+        {/* Table Header - now inside scrollable area */}
+        <div className="bg-neutral-900 dark:bg-black text-white text-xs font-bold px-2 py-2 border-b-2 border-neutral-600 sticky top-0 z-10 min-w-[800px]">
+          <div className="flex items-center">
+            <div className="w-20 text-center">TIME</div>
+            <div className="w-42 px-2">CALL TITLE</div>
+            <div className="w-48 px-2">ADDRESS</div>
+            <div className="w-24 px-2 text-center">AGENCY</div>
+            <div className="w-16 text-center">STATUS</div>
+          </div>
+        </div>
+
+        <div className="relative min-w-[800px]">
           {visibleItems}
         </div>
       </div>
@@ -179,6 +184,7 @@ export function IncidentsList({ incidents, selectedIncident, onIncidentSelect, o
   const [filters, setFilters] = useState<FilterState>({
     search: '',
     status: 'ALL',
+    dateRange: 'LAST_3_DAYS',
     startDate: undefined,
     endDate: undefined,
     agency: 'ALL',
@@ -189,8 +195,29 @@ export function IncidentsList({ incidents, selectedIncident, onIncidentSelect, o
 
   const ITEMS_PER_PAGE = 50;
 
+  // Helper function to get date range
+  const getDateRange = (range: DateRange) => {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    switch (range) {
+      case 'TODAY':
+        return { start: today, end: new Date(today.getTime() + 24 * 60 * 60 * 1000) };
+      case 'LAST_3_DAYS':
+        return { start: new Date(today.getTime() - 3 * 24 * 60 * 60 * 1000), end: new Date() };
+      case 'WEEK':
+        return { start: new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000), end: new Date() };
+      case 'MONTH':
+        return { start: new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000), end: new Date() };
+      case 'CUSTOM':
+        return { start: filters.startDate, end: filters.endDate };
+      default:
+        return { start: new Date(today.getTime() - 3 * 24 * 60 * 60 * 1000), end: new Date() };
+    }
+  };
+
   const allFilteredIncidents = useMemo(() => {
-    return incidents.filter(incident => {
+    const filtered = incidents.filter(incident => {
       // Search filter
       if (filters.search) {
         const searchLower = filters.search.toLowerCase();
@@ -201,7 +228,7 @@ export function IncidentsList({ incidents, selectedIncident, onIncidentSelect, o
           incident.traffic_report_status,
         ];
 
-        if (!searchFields.some(field => field.toLowerCase().includes(searchLower))) {
+        if (!searchFields.some(field => field?.toLowerCase().includes(searchLower))) {
           return false;
         }
       }
@@ -216,22 +243,19 @@ export function IncidentsList({ incidents, selectedIncident, onIncidentSelect, o
         return false;
       }
 
-      // Date filter
-      if (filters.startDate || filters.endDate) {
+      // Date range filter
+      const dateRange = getDateRange(filters.dateRange);
+      if (dateRange.start || dateRange.end) {
         const incidentDate = new Date(incident.published_date);
 
-        if (filters.startDate) {
-          const startOfDay = new Date(filters.startDate);
-          startOfDay.setHours(0, 0, 0, 0);
-          if (incidentDate < startOfDay) {
+        if (dateRange.start) {
+          if (incidentDate < dateRange.start) {
             return false;
           }
         }
 
-        if (filters.endDate) {
-          const endOfDay = new Date(filters.endDate);
-          endOfDay.setHours(23, 59, 59, 999);
-          if (incidentDate > endOfDay) {
+        if (dateRange.end) {
+          if (incidentDate > dateRange.end) {
             return false;
           }
         }
@@ -239,11 +263,35 @@ export function IncidentsList({ incidents, selectedIncident, onIncidentSelect, o
 
       return true;
     });
+
+    return filtered;
   }, [incidents, filters]);
 
-  // Get the currently displayed incidents (first displayCount items)
+  // Get the currently displayed incidents with balanced mix
   const displayedIncidents = useMemo(() => {
-    return allFilteredIncidents.slice(0, displayCount);
+    // Create a balanced mix of fire and traffic incidents
+    const fireIncidents = allFilteredIncidents.filter(i => i.incidentType === 'fire');
+    const trafficIncidents = allFilteredIncidents.filter(i => i.incidentType === 'traffic');
+
+    const halfCount = Math.floor(displayCount / 2);
+    const fireSlice = fireIncidents.slice(0, halfCount);
+    const trafficSlice = trafficIncidents.slice(0, halfCount);
+
+    // Combine and sort by date (newest first)
+    const mixed = [...fireSlice, ...trafficSlice].sort((a, b) =>
+      new Date(b.published_date).getTime() - new Date(a.published_date).getTime()
+    );
+
+    // If we don't have enough of one type, fill with the other type
+    if (mixed.length < displayCount) {
+      const remaining = displayCount - mixed.length;
+      const allRemaining = allFilteredIncidents.filter(i =>
+        !mixed.some(m => m.traffic_report_id === i.traffic_report_id)
+      );
+      mixed.push(...allRemaining.slice(0, remaining));
+    }
+
+    return mixed.slice(0, displayCount);
   }, [allFilteredIncidents, displayCount]);
 
   // Reset display count when filters change
@@ -259,7 +307,7 @@ export function IncidentsList({ incidents, selectedIncident, onIncidentSelect, o
   }, [displayedIncidents, onDisplayedIncidentsChange]);
 
   const uniqueAgencies = useMemo(() => {
-    const agencies = new Set(incidents.map(incident => incident.agency));
+    const agencies = new Set(incidents.map(incident => incident.agency?.trim() || 'Unknown'));
     return Array.from(agencies).sort();
   }, [incidents]);
 
@@ -267,6 +315,7 @@ export function IncidentsList({ incidents, selectedIncident, onIncidentSelect, o
     setFilters({
       search: '',
       status: 'ALL',
+      dateRange: 'LAST_3_DAYS',
       startDate: undefined,
       endDate: undefined,
       agency: 'ALL',
@@ -285,7 +334,7 @@ export function IncidentsList({ incidents, selectedIncident, onIncidentSelect, o
       {/* Header */}
       <div className="p-4 border-b space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Fire Incidents</h2>
+          <h2 className="text-lg font-semibold">Incidents</h2>
           <div className="flex items-center gap-2">
             <span className="bg-neutral-200 dark:bg-neutral-700 px-2 py-1 rounded text-xs font-medium">
               {displayedIncidents.length} of {allFilteredIncidents.length} incidents
@@ -323,41 +372,56 @@ export function IncidentsList({ incidents, selectedIncident, onIncidentSelect, o
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="ALL">All Agencies</SelectItem>
-              {uniqueAgencies.map(agency => (
-                <SelectItem key={agency} value={agency}>{agency}</SelectItem>
+              {uniqueAgencies.map((agency, index) => (
+                <SelectItem key={`${agency}-${index}`} value={agency}>{agency}</SelectItem>
               ))}
             </SelectContent>
           </Select>
 
-          <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
-            <PopoverTrigger asChild>
-              <Button variant="outline" size="sm" className="gap-2">
-                <Calendar className="h-4 w-4" />
-                {filters.startDate ? format(filters.startDate, 'MMM dd') : 'Date'}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="start">
-              <CalendarComponent
-                mode="range"
-                selected={{
-                  from: filters.startDate,
-                  to: filters.endDate,
-                }}
-                onSelect={(range) => {
-                  setFilters(prev => ({
-                    ...prev,
-                    startDate: range?.from,
-                    endDate: range?.to,
-                  }));
-                  if (range?.from && range?.to) {
-                    setIsDatePickerOpen(false);
-                  }
-                }}
-              />
-            </PopoverContent>
-          </Popover>
+          <Select value={filters.dateRange} onValueChange={(value: DateRange) => setFilters(prev => ({ ...prev, dateRange: value }))}>
+            <SelectTrigger className="w-32">
+              <SelectValue placeholder="Date Range" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="TODAY">Today</SelectItem>
+              <SelectItem value="LAST_3_DAYS">Last 3 Days</SelectItem>
+              <SelectItem value="WEEK">Week</SelectItem>
+              <SelectItem value="MONTH">Month</SelectItem>
+              <SelectItem value="CUSTOM">Custom</SelectItem>
+            </SelectContent>
+          </Select>
 
-          {(filters.search || filters.status !== 'ALL' || filters.agency !== 'ALL' || filters.startDate || filters.endDate) && (
+          {filters.dateRange === 'CUSTOM' && (
+            <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-2">
+                  <Calendar className="h-4 w-4" />
+                  {filters.startDate ? format(filters.startDate, 'MMM dd') : 'Custom Date'}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <CalendarComponent
+                  mode="range"
+                  selected={{
+                    from: filters.startDate,
+                    to: filters.endDate,
+                  }}
+                  onSelect={(range) => {
+                    setFilters(prev => ({
+                      ...prev,
+                      startDate: range?.from,
+                      endDate: range?.to,
+                    }));
+                    if (range?.from && range?.to) {
+                      setIsDatePickerOpen(false);
+                    }
+                  }}
+                />
+              </PopoverContent>
+            </Popover>
+          )}
+
+          {(filters.search || filters.status !== 'ALL' || filters.agency !== 'ALL' || filters.dateRange !== 'LAST_3_DAYS' || filters.startDate || filters.endDate) && (
             <Button variant="ghost" size="sm" onClick={clearFilters}>
               Clear
             </Button>
