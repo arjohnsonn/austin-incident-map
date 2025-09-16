@@ -23,11 +23,17 @@ const BUFFER_SIZE = 10;
 const VirtualizedList = memo(({
   incidents,
   selectedIncident,
-  onIncidentSelect
+  onIncidentSelect,
+  hasMoreItems,
+  loadMore,
+  allFilteredCount
 }: {
   incidents: FireIncident[];
   selectedIncident: FireIncident | null;
   onIncidentSelect: (incident: FireIncident) => void;
+  hasMoreItems: boolean;
+  loadMore: () => void;
+  allFilteredCount: number;
 }) => {
   const [scrollTop, setScrollTop] = useState(0);
   const [containerHeight, setContainerHeight] = useState(600);
@@ -60,6 +66,9 @@ const VirtualizedList = memo(({
     }
   };
 
+  const LOAD_MORE_HEIGHT = hasMoreItems ? 48 : 0;
+  const totalHeight = incidents.length * ITEM_HEIGHT + LOAD_MORE_HEIGHT;
+
   const startIndex = Math.max(0, Math.floor(scrollTop / ITEM_HEIGHT) - BUFFER_SIZE);
   const endIndex = Math.min(
     incidents.length - 1,
@@ -74,20 +83,19 @@ const VirtualizedList = memo(({
     visibleItems.push(
       <div
         key={incident.traffic_report_id}
-        style={{
-          position: 'absolute',
-          top: i * ITEM_HEIGHT,
-          left: 0,
-          right: 0,
-          height: ITEM_HEIGHT,
-        }}
-        className={`cursor-pointer transition-colors border-b border-neutral-300 dark:border-neutral-600 hover:bg-neutral-100 dark:hover:bg-neutral-700 ${
+        className={`absolute inset-x-0 cursor-pointer transition-colors border-b border-neutral-300 dark:border-neutral-600 hover:bg-neutral-100 dark:hover:bg-neutral-700 ${
           isSelected
             ? 'bg-blue-200 dark:bg-blue-800'
             : i % 2 === 0
               ? 'bg-neutral-50 dark:bg-neutral-900'
               : 'bg-white dark:bg-neutral-800'
         }`}
+        style={{
+          '--item-top': `${i * ITEM_HEIGHT}px`,
+          '--item-height': `${ITEM_HEIGHT}px`,
+          top: 'var(--item-top)',
+          height: 'var(--item-height)',
+        } as React.CSSProperties}
         onClick={() => onIncidentSelect(incident)}
       >
         <div className="flex items-center h-full px-2 text-xs">
@@ -116,10 +124,33 @@ const VirtualizedList = memo(({
     );
   }
 
+  // Add Load More button if it should be visible
+  if (hasMoreItems && (scrollTop + containerHeight >= incidents.length * ITEM_HEIGHT - 100)) {
+    visibleItems.push(
+      <div
+        key="load-more"
+        className="absolute inset-x-0 flex items-center justify-center bg-white dark:bg-neutral-900 border-t border-neutral-300 dark:border-neutral-600"
+        style={{
+          '--item-top': `${incidents.length * ITEM_HEIGHT}px`,
+          '--item-height': `${LOAD_MORE_HEIGHT}px`,
+          top: 'var(--item-top)',
+          height: 'var(--item-height)',
+        } as React.CSSProperties}
+      >
+        <button
+          onClick={loadMore}
+          className="px-4 py-2 text-sm bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 rounded border border-neutral-300 dark:border-neutral-600 transition-colors"
+        >
+          Load More ({Math.min(50, allFilteredCount - incidents.length)} more incidents)
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <div ref={containerRef} className="flex-1 overflow-hidden flex flex-col">
+    <div className="flex flex-col h-full">
       {/* Table Header */}
-      <div className="bg-neutral-900 dark:bg-black text-white text-xs font-bold px-2 py-2 border-b-2 border-neutral-600">
+      <div className="bg-neutral-900 dark:bg-black text-white text-xs font-bold px-2 py-2 border-b-2 border-neutral-600 flex-shrink-0">
         <div className="flex items-center">
           <div className="flex-1 px-2">CALL TITLE</div>
           <div className="w-48 px-2">ADDRESS</div>
@@ -129,15 +160,12 @@ const VirtualizedList = memo(({
       </div>
 
       <div
-        className="overflow-auto flex-1"
+        ref={containerRef}
+        className="flex-1 overflow-auto"
         onScroll={handleScroll}
       >
         <div
-          style={{
-            height: incidents.length * ITEM_HEIGHT,
-            position: 'relative',
-          }}
-        >
+          className="relative">
           {visibleItems}
         </div>
       </div>
@@ -317,7 +345,6 @@ export function IncidentsList({ incidents, selectedIncident, onIncidentSelect, o
                     setIsDatePickerOpen(false);
                   }
                 }}
-                initialFocus
               />
             </PopoverContent>
           </Popover>
@@ -339,26 +366,14 @@ export function IncidentsList({ incidents, selectedIncident, onIncidentSelect, o
             </div>
           </div>
         ) : (
-          <>
-            <VirtualizedList
-              incidents={displayedIncidents}
-              selectedIncident={selectedIncident}
-              onIncidentSelect={onIncidentSelect}
-            />
-
-            {/* Load More Button */}
-            {hasMoreItems && (
-              <div className="p-4 border-t">
-                <Button
-                  variant="outline"
-                  onClick={loadMore}
-                  className="w-full"
-                >
-                  Load More ({Math.min(ITEMS_PER_PAGE, allFilteredIncidents.length - displayCount)} more incidents)
-                </Button>
-              </div>
-            )}
-          </>
+          <VirtualizedList
+            incidents={displayedIncidents}
+            selectedIncident={selectedIncident}
+            onIncidentSelect={onIncidentSelect}
+            hasMoreItems={hasMoreItems}
+            loadMore={loadMore}
+            allFilteredCount={allFilteredIncidents.length}
+          />
         )}
       </div>
     </div>
