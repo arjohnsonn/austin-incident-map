@@ -18,8 +18,6 @@ export default function Home() {
     setDisplayedIncidents(incidents);
   }, []);
 
-
-  // Show toast when manual refresh completes
   useEffect(() => {
     if (isManualRefresh && lastUpdated) {
       toast.success('Incidents refreshed successfully');

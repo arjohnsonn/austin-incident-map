@@ -24,7 +24,6 @@ export function IncidentMap({
   const [userLocation, setUserLocation] = useState<{lat: number; lng: number} | null>(null);
   const { resolvedTheme } = useTheme();
 
-  // Add CSS for pulsing animation and popup styling
   useEffect(() => {
     const style = document.createElement("style");
     const isDark = resolvedTheme === "dark";
@@ -132,7 +131,6 @@ export function IncidentMap({
     };
   }, [resolvedTheme]);
 
-  // Get the appropriate map style based on theme
   const getMapStyle = (currentTheme: string | undefined) => {
     const isDark = currentTheme === "dark";
 
@@ -167,7 +165,6 @@ export function IncidentMap({
     };
   };
 
-  // Initialize map
   useEffect(() => {
     if (!mapContainer.current || map.current) return;
 
@@ -182,7 +179,6 @@ export function IncidentMap({
 
     map.current.on("load", () => {
       setMapLoaded(true);
-      // Force resize to ensure proper rendering
       setTimeout(() => {
         if (map.current) {
           map.current.resize();
@@ -198,7 +194,6 @@ export function IncidentMap({
     };
   }, [resolvedTheme]);
 
-  // Get user location
   useEffect(() => {
     if (!mapLoaded) return;
 
@@ -208,7 +203,6 @@ export function IncidentMap({
           const { latitude, longitude } = position.coords;
           console.log('User location:', { latitude, longitude });
 
-          // Validate coordinates
           if (
             !isNaN(latitude) &&
             !isNaN(longitude) &&
@@ -228,21 +222,18 @@ export function IncidentMap({
         {
           enableHighAccuracy: true,
           timeout: 10000,
-          maximumAge: 300000, // 5 minutes
+          maximumAge: 300000, 
         }
       );
     }
   }, [mapLoaded]);
 
-  // Update map style when theme changes
   useEffect(() => {
     if (!map.current || !mapLoaded) return;
 
     map.current.setStyle(getMapStyle(resolvedTheme));
   }, [resolvedTheme, mapLoaded]);
 
-
-  // Group incidents by location to handle clustering
   const groupIncidentsByLocation = (incidents: FireIncident[]) => {
     const groups = new Map<string, FireIncident[]>();
 
@@ -250,7 +241,6 @@ export function IncidentMap({
       const lng = parseFloat(incident.longitude);
       const lat = parseFloat(incident.latitude);
 
-      // Skip invalid coordinates
       if (
         isNaN(lng) ||
         isNaN(lat) ||
@@ -262,7 +252,6 @@ export function IncidentMap({
         return;
       }
 
-      // Round coordinates to avoid tiny differences
       const roundedLng = Math.round(lng * 10000) / 10000;
       const roundedLat = Math.round(lat * 10000) / 10000;
       const key = `${roundedLat},${roundedLng}`;
@@ -276,29 +265,23 @@ export function IncidentMap({
     return Array.from(groups.values());
   };
 
-  // Add/update markers when incidents change
   useEffect(() => {
     if (!map.current || !mapLoaded) return;
 
-    // Clear existing markers
     markers.current.forEach((marker) => marker.remove());
     markers.current.clear();
 
-    // Add user location marker first if available
     if (userLocation) {
       console.log('Adding user location marker at:', userLocation);
 
-      // Create user location marker element using exact same method as incidents
       const userMarkerEl = document.createElement("div");
       userMarkerEl.className = "w-4 h-4 rounded-full border-2 cursor-pointer border-white bg-blue-500 active-marker relative";
 
-      // Add radar ring for pulsing effect (exact same as incidents)
       const radarRing = document.createElement("div");
       radarRing.className = "radar-ring";
       radarRing.style.backgroundColor = "#3b82f6"; // blue color
       userMarkerEl.appendChild(radarRing);
 
-      // Add hover effects without interfering with positioning (exact same as incidents)
       userMarkerEl.style.transformOrigin = "center center";
 
       const userMarker = new maplibregl.Marker({
@@ -308,14 +291,11 @@ export function IncidentMap({
         .setLngLat([userLocation.lng, userLocation.lat])
         .addTo(map.current!);
 
-      // Store user location marker
       markers.current.set("user-location", userMarker);
     }
 
-    // Group incidents by location
     const incidentGroups = groupIncidentsByLocation(incidents);
 
-    // Add markers for each group
     incidentGroups.forEach((group) => {
       const firstIncident = group[0];
       const lng = parseFloat(firstIncident.longitude);
@@ -326,7 +306,6 @@ export function IncidentMap({
       );
       const isCluster = group.length > 1;
 
-      // Determine predominant incident type for cluster coloring based on ACTIVE incidents only
       const activeIncidents = group.filter(
         (inc) => inc.traffic_report_status === "ACTIVE"
       );
@@ -337,7 +316,6 @@ export function IncidentMap({
         (inc) => (inc.incidentType || "fire") === "traffic"
       ).length;
 
-      // If there are active incidents, use their predominant type, otherwise fall back to all incidents
       let predominantType = "fire"; // default
       if (activeIncidents.length > 0) {
         predominantType = activeFireCount >= activeTrafficCount ? "fire" : "traffic";
@@ -351,11 +329,9 @@ export function IncidentMap({
         predominantType = fireCount >= trafficCount ? "fire" : "traffic";
       }
 
-      // Create marker element
       const markerEl = document.createElement("div");
 
       if (isCluster) {
-        // Cluster marker with count - color based on predominant type
         const colors =
           predominantType === "fire"
             ? {
@@ -374,14 +350,12 @@ export function IncidentMap({
         }`;
         markerEl.textContent = group.length.toString();
 
-        // Add radar ring for active clusters
         if (hasActiveIncidents) {
           const radarRing = document.createElement("div");
           radarRing.className = `radar-ring ${predominantType === "fire" ? "fire-radar" : "traffic-radar"}`;
           markerEl.appendChild(radarRing);
         }
       } else {
-        // Single incident marker
         const incident = firstIncident;
         const isActive = incident.traffic_report_status === "ACTIVE";
         const incidentType = incident.incidentType || "fire";
@@ -394,7 +368,6 @@ export function IncidentMap({
 
           markerEl.className = `w-4 h-4 rounded-full border-2 cursor-pointer ${colors} active-marker relative`;
 
-          // Add radar ring
           const radarRing = document.createElement("div");
           radarRing.className = `radar-ring ${incidentType === "fire" ? "fire-radar" : "traffic-radar"}`;
           markerEl.appendChild(radarRing);
@@ -404,7 +377,6 @@ export function IncidentMap({
         }
       }
 
-      // Add hover effects without interfering with positioning
       markerEl.style.transformOrigin = "center center";
 
       const marker = new maplibregl.Marker({
@@ -414,7 +386,6 @@ export function IncidentMap({
         .setLngLat([lng, lat])
         .addTo(map.current!);
 
-      // Create popup content based on cluster or single incident
       let popupContent = "";
 
       const isDark = resolvedTheme === "dark";
@@ -423,7 +394,6 @@ export function IncidentMap({
       const neutralTextColor = isDark ? "#9ca3af" : "#6b7280";
 
       if (isCluster) {
-        // Cluster popup showing all incidents
         const activeCount = group.filter(
           (inc) => inc.traffic_report_status === "ACTIVE"
         ).length;
@@ -475,7 +445,6 @@ export function IncidentMap({
           </div>
         `;
       } else {
-        // Single incident popup
         const incident = firstIncident;
         const isActive = incident.traffic_report_status === "ACTIVE";
 
@@ -516,42 +485,31 @@ export function IncidentMap({
         .setLngLat([lng, lat])
         .setHTML(popupContent);
 
-      // Event handlers
       let hoverTimeout: NodeJS.Timeout;
       let isClicked = false;
 
-      // Click handler - highest priority
       markerEl.addEventListener("click", (e) => {
         e.stopPropagation();
         isClicked = true;
 
-        // Clear any hover timeout
         clearTimeout(hoverTimeout);
 
-        // For clusters, select the first incident
-        // For single incidents, select that incident
         onIncidentSelect(firstIncident);
 
-        // Show popup immediately on click
         popup.addTo(map.current!);
 
-        // Reset click flag after a short delay
         setTimeout(() => {
           isClicked = false;
         }, 100);
       });
 
-      // Hover handlers
       markerEl.addEventListener("mouseenter", () => {
-        // Don't interfere if recently clicked
         if (isClicked) {
           return;
         }
 
-        // Scale effect - preserve MapLibre's positioning transform
         const beforeTransform = markerEl.style.transform;
 
-        // Extract the positioning part of the transform and add scale
         const positionMatch = beforeTransform.match(
           /translate\([^)]+\) translate\([^)]+\) rotateX\([^)]+\) rotateZ\([^)]+\)/
         );
@@ -559,7 +517,6 @@ export function IncidentMap({
 
         markerEl.style.transform = `${positionTransform} scale(1.2)`;
 
-        // Popup with delay (only if not clicked)
         clearTimeout(hoverTimeout);
         hoverTimeout = setTimeout(() => {
           if (!isClicked) {
@@ -573,10 +530,8 @@ export function IncidentMap({
           return;
         }
 
-        // Reset scale - preserve MapLibre's positioning transform
         const beforeTransform = markerEl.style.transform;
 
-        // Extract the positioning part of the transform and reset scale
         const positionMatch = beforeTransform.match(
           /translate\([^)]+\) translate\([^)]+\) rotateX\([^)]+\) rotateZ\([^)]+\)/
         );
@@ -584,14 +539,12 @@ export function IncidentMap({
 
         markerEl.style.transform = `${positionTransform} scale(1)`;
 
-        // Remove popup (only if not clicked)
         clearTimeout(hoverTimeout);
         if (!isClicked) {
           popup.remove();
         }
       });
 
-      // Store marker with group identifier
       const markerId = isCluster
         ? `cluster_${lng}_${lat}`
         : firstIncident.traffic_report_id;
@@ -599,14 +552,12 @@ export function IncidentMap({
     });
   }, [incidents, selectedIncident, onIncidentSelect, mapLoaded, resolvedTheme, userLocation]);
 
-  // Fly to selected incident
   useEffect(() => {
     if (!map.current || !selectedIncident) return;
 
     const lng = parseFloat(selectedIncident.longitude);
     const lat = parseFloat(selectedIncident.latitude);
 
-    // Validate coordinates
     if (
       isNaN(lng) ||
       isNaN(lat) ||

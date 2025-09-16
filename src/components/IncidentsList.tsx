@@ -235,7 +235,6 @@ export function IncidentsList({
 
   const allFilteredIncidents = useMemo(() => {
     const filtered = incidents.filter((incident) => {
-      // Search filter
       if (filters.search) {
         const searchLower = filters.search.toLowerCase();
         const searchFields = [
@@ -254,7 +253,6 @@ export function IncidentsList({
         }
       }
 
-      // Status filter
       if (
         filters.status !== "ALL" &&
         incident.traffic_report_status !== filters.status
@@ -262,12 +260,10 @@ export function IncidentsList({
         return false;
       }
 
-      // Agency filter
       if (filters.agency !== "ALL" && incident.agency !== filters.agency) {
         return false;
       }
 
-      // Date range filter
       const dateRange = getDateRange(filters.dateRange);
       if (dateRange.start || dateRange.end) {
         const incidentDate = new Date(incident.published_date);
@@ -291,7 +287,6 @@ export function IncidentsList({
     return filtered;
   }, [incidents, filters, getDateRange]);
 
-  // Get all filtered incidents sorted by date (newest first)
   const displayedIncidents = useMemo(() => {
     return allFilteredIncidents.sort(
       (a, b) =>
@@ -301,7 +296,6 @@ export function IncidentsList({
   }, [allFilteredIncidents]);
 
 
-  // Notify parent of displayed incidents changes
   useEffect(() => {
     if (onDisplayedIncidentsChange) {
       onDisplayedIncidentsChange(displayedIncidents);
@@ -327,7 +321,6 @@ export function IncidentsList({
   };
 
 
-  // Update current time every second for real-time "time ago" display
   useEffect(() => {
     const interval = setInterval(() => {
       setCurrentTime(new Date());

@@ -17,7 +17,6 @@ interface RawIncidentData {
   agency: string;
 }
 
-// Get recent data, ordered by published_date descending (newest first)
 const FIRE_API_ENDPOINT = 'https://data.austintexas.gov/resource/wpu4-x69d.json?$order=published_date DESC&$limit=1000';
 const TRAFFIC_API_ENDPOINT = 'https://data.austintexas.gov/resource/dx9v-zd7x.json?$order=published_date DESC&$limit=1000';
 
@@ -91,7 +90,6 @@ export function useFireIncidents() {
       }
       const newData = await fetchFireIncidents();
 
-      // Smart update: only update if data has actually changed
       setIncidents(prevIncidents => {
         if (prevIncidents.length === 0) {
           return newData;
@@ -122,12 +120,10 @@ export function useFireIncidents() {
           return existing;
         });
 
-        // Check if any incidents were removed
         if (newData.length !== prevIncidents.length) {
           hasChanges = true;
         }
 
-        // Only update if there are actual changes
         return hasChanges ? updatedIncidents : prevIncidents;
       });
 
@@ -144,7 +140,6 @@ export function useFireIncidents() {
   useEffect(() => {
     fetchData();
 
-    // Refresh every 1 minute
     const interval = setInterval(fetchData, 1 * 60 * 1000);
 
     return () => clearInterval(interval);
