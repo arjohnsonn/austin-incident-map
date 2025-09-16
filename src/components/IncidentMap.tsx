@@ -34,8 +34,36 @@ export function IncidentMap({
         50% { opacity: 0.5; }
       }
 
-      .active-marker {
-        animation: pulse 1.5s infinite;
+      @keyframes radar-pulse {
+        0% {
+          transform: scale(1);
+          opacity: 0.7;
+        }
+        100% {
+          transform: scale(4);
+          opacity: 0;
+        }
+      }
+
+
+      .radar-ring {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        border-radius: 50%;
+        pointer-events: none;
+        animation: radar-pulse 1.5s infinite;
+        z-index: -1;
+      }
+
+      .fire-radar {
+        background-color: #dc2626;
+      }
+
+      .traffic-radar {
+        background-color: #eab308;
       }
 
       /* Popup styling with maximum specificity */
@@ -241,6 +269,13 @@ export function IncidentMap({
             : "w-6 h-6 bg-neutral-600 border-2 border-neutral-800"
         }`;
         markerEl.textContent = group.length.toString();
+
+        // Add radar ring for active clusters
+        if (hasActiveIncidents) {
+          const radarRing = document.createElement("div");
+          radarRing.className = `radar-ring ${predominantType === "fire" ? "fire-radar" : "traffic-radar"}`;
+          markerEl.appendChild(radarRing);
+        }
       } else {
         // Single incident marker
         const incident = firstIncident;
@@ -253,7 +288,12 @@ export function IncidentMap({
               ? "border-red-600 bg-red-600"
               : "border-yellow-500 bg-yellow-500";
 
-          markerEl.className = `w-4 h-4 rounded-full border-2 cursor-pointer ${colors} active-marker`;
+          markerEl.className = `w-4 h-4 rounded-full border-2 cursor-pointer ${colors} active-marker relative`;
+
+          // Add radar ring
+          const radarRing = document.createElement("div");
+          radarRing.className = `radar-ring ${incidentType === "fire" ? "fire-radar" : "traffic-radar"}`;
+          markerEl.appendChild(radarRing);
         } else {
           markerEl.className =
             "w-4 h-4 rounded-full border-2 cursor-pointer border-neutral-600 bg-neutral-400";
