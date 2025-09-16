@@ -7,9 +7,10 @@ import { IncidentsList } from '@/components/IncidentsList';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { useFireIncidents } from '@/lib/api';
 import { FireIncident } from '@/types/incident';
+import { toast } from 'sonner';
 
 export default function Home() {
-  const { incidents, loading, error, lastUpdated, refetch } = useFireIncidents();
+  const { incidents, error, lastUpdated, isManualRefresh, refetch } = useFireIncidents();
   const [selectedIncident, setSelectedIncident] = useState<FireIncident | null>(null);
   const [displayedIncidents, setDisplayedIncidents] = useState<FireIncident[]>([]);
 
@@ -20,13 +21,20 @@ export default function Home() {
   // Initialize displayedIncidents with all incidents when first loaded
   useEffect(() => {
     if (incidents.length > 0 && displayedIncidents.length === 0) {
-      // Since data is now ordered by date descending, just take the first 50 for initial display
+      // Since data is now ordered by date descending, just take the first 100 for initial display
       // The filtering component will handle showing the right mix based on date ranges
-      setDisplayedIncidents(incidents.slice(0, 50));
+      setDisplayedIncidents(incidents.slice(0, 100));
     }
   }, [incidents, displayedIncidents.length]);
 
-  if (loading) {
+  // Show toast when manual refresh completes
+  useEffect(() => {
+    if (isManualRefresh && lastUpdated) {
+      toast.success('Incidents refreshed successfully');
+    }
+  }, [isManualRefresh]);
+
+  if (incidents.length === 0) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-lg">Loading incidents...</div>
@@ -63,7 +71,6 @@ export default function Home() {
             selectedIncident={selectedIncident}
             onIncidentSelect={setSelectedIncident}
             onDisplayedIncidentsChange={handleDisplayedIncidentsChange}
-            loading={loading}
             lastUpdated={lastUpdated}
             onRefresh={refetch}
           />
