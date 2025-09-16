@@ -4,14 +4,13 @@ Real-time fire, rescue, hazmat, and traffic incidents map for Austin and Travis 
 
 ## Tech Stack
 
-- **Framework**: Next.js 15.5.3 with React 19.1.0
+- **Framework**: Next.js with React
 - **Language**: TypeScript 5
 - **Styling**: Tailwind CSS 4
-- **UI Components**: Radix UI primitives
+- **UI Components**: shadcn
 - **Maps**: MapLibre GL
 - **State Management**: React hooks (useState, useEffect)
 - **Data Source**: Austin Open Data Portal
-- **Notifications**: Sonner
 - **Development**: Turbopack
 
 ## Features
