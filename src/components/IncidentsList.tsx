@@ -187,7 +187,7 @@ export function IncidentsList({
 }: IncidentsListProps) {
   const [filters, setFilters] = useState<FilterState>({
     search: "",
-    status: "ALL",
+    status: "ACTIVE",
     dateRange: "WEEK",
     startDate: undefined,
     endDate: undefined,
@@ -318,7 +318,7 @@ export function IncidentsList({
   const clearFilters = () => {
     setFilters({
       search: "",
-      status: "ALL",
+      status: "ACTIVE",
       dateRange: "WEEK",
       startDate: undefined,
       endDate: undefined,
