@@ -24,10 +24,10 @@ export function FireMap({ incidents, selectedIncident, onIncidentSelect }: FireM
     const isDark = currentTheme === 'dark';
 
     return {
-      version: 8,
+      version: 8 as const,
       sources: {
         'osm-tiles': {
-          type: 'raster',
+          type: 'raster' as const,
           tiles: isDark
             ? [
                 'https://cartodb-basemaps-a.global.ssl.fastly.net/dark_all/{z}/{x}/{y}.png',
@@ -45,7 +45,7 @@ export function FireMap({ incidents, selectedIncident, onIncidentSelect }: FireM
       layers: [
         {
           id: 'osm-tiles',
-          type: 'raster',
+          type: 'raster' as const,
           source: 'osm-tiles',
           minzoom: 0,
           maxzoom: 19,
@@ -83,14 +83,14 @@ export function FireMap({ incidents, selectedIncident, onIncidentSelect }: FireM
         map.current = null;
       }
     };
-  }, [resolvedTheme]);
+  }, []);
 
   // Update map style when theme changes
   useEffect(() => {
     if (!map.current || !mapLoaded) return;
 
     map.current.setStyle(getMapStyle(resolvedTheme));
-  }, [resolvedTheme, mapLoaded, getMapStyle]);
+  }, [resolvedTheme, mapLoaded]);
 
   // Group incidents by location to handle clustering
   const groupIncidentsByLocation = (incidents: FireIncident[]) => {
