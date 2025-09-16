@@ -20,7 +20,9 @@ export function IncidentMap({
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const markers = useRef<Map<string, maplibregl.Marker>>(new Map());
+  const userLocationMarker = useRef<maplibregl.Marker | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
+  const [userLocation, setUserLocation] = useState<{lat: number; lng: number} | null>(null);
   const { resolvedTheme } = useTheme();
 
   // Add CSS for pulsing animation and popup styling
@@ -64,6 +66,28 @@ export function IncidentMap({
 
       .traffic-radar {
         background-color: #eab308;
+      }
+
+      .user-location-marker {
+        width: 16px;
+        height: 16px;
+        background-color: #3b82f6;
+        border: 3px solid white;
+        border-radius: 50%;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        animation: user-pulse 2s infinite;
+        position: relative;
+      }
+
+      @keyframes user-pulse {
+        0%, 100% {
+          transform: scale(1);
+          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2), 0 0 0 0 rgba(59, 130, 246, 0.7);
+        }
+        50% {
+          transform: scale(1.1);
+          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2), 0 0 0 10px rgba(59, 130, 246, 0);
+        }
       }
 
       /* Popup styling with maximum specificity */
@@ -175,12 +199,63 @@ export function IncidentMap({
     };
   }, [resolvedTheme]);
 
+  // Get user location
+  useEffect(() => {
+    if (!mapLoaded) return;
+
+    if ('geolocation' in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          setUserLocation({ lat: latitude, lng: longitude });
+        },
+        (error) => {
+          console.warn('Error getting user location:', error);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 300000, // 5 minutes
+        }
+      );
+    }
+  }, [mapLoaded]);
+
   // Update map style when theme changes
   useEffect(() => {
     if (!map.current || !mapLoaded) return;
 
     map.current.setStyle(getMapStyle(resolvedTheme));
   }, [resolvedTheme, mapLoaded]);
+
+  // Add user location marker
+  useEffect(() => {
+    if (!map.current || !userLocation) return;
+
+    // Remove existing user location marker
+    if (userLocationMarker.current) {
+      userLocationMarker.current.remove();
+    }
+
+    // Create user location marker element
+    const userMarkerEl = document.createElement("div");
+    userMarkerEl.className = "user-location-marker";
+
+    // Create and add the marker
+    userLocationMarker.current = new maplibregl.Marker({
+      element: userMarkerEl,
+      anchor: "center",
+    })
+      .setLngLat([userLocation.lng, userLocation.lat])
+      .addTo(map.current);
+
+    return () => {
+      if (userLocationMarker.current) {
+        userLocationMarker.current.remove();
+        userLocationMarker.current = null;
+      }
+    };
+  }, [userLocation]);
 
   // Group incidents by location to handle clustering
   const groupIncidentsByLocation = (incidents: FireIncident[]) => {
