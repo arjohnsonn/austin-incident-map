@@ -290,15 +290,15 @@ export function IncidentMap({
 
       // Create user location marker element using exact same method as incidents
       const userMarkerEl = document.createElement("div");
-      userMarkerEl.className = "w-4 h-4 rounded-full border-2 cursor-pointer border-white bg-blue-500 user-location-marker relative";
+      userMarkerEl.className = "w-4 h-4 rounded-full border-2 cursor-pointer border-white bg-blue-500 active-marker relative";
 
-      // Add radar ring for pulsing effect
+      // Add radar ring for pulsing effect (exact same as incidents)
       const radarRing = document.createElement("div");
       radarRing.className = "radar-ring";
       radarRing.style.backgroundColor = "#3b82f6"; // blue color
       userMarkerEl.appendChild(radarRing);
 
-      // Add hover effects without interfering with positioning
+      // Add hover effects without interfering with positioning (exact same as incidents)
       userMarkerEl.style.transformOrigin = "center center";
 
       const userMarker = new maplibregl.Marker({
