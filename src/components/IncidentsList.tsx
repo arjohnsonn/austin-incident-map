@@ -86,7 +86,6 @@ const VirtualizedList = memo(
     };
 
     const LOAD_MORE_HEIGHT = hasMoreItems ? 48 : 0;
-    const totalHeight = incidents.length * ITEM_HEIGHT + LOAD_MORE_HEIGHT;
 
     const startIndex = Math.max(
       0,
@@ -236,8 +235,7 @@ export function IncidentsList({
 
   const ITEMS_PER_PAGE = 100;
 
-  // Helper function to get date range
-  const getDateRange = (range: DateRange) => {
+  const getDateRange = useCallback((range: DateRange) => {
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
@@ -270,7 +268,7 @@ export function IncidentsList({
           end: new Date(),
         };
     }
-  };
+  }, [filters.startDate, filters.endDate]);
 
   const allFilteredIncidents = useMemo(() => {
     const filtered = incidents.filter((incident) => {
@@ -328,7 +326,7 @@ export function IncidentsList({
     });
 
     return filtered;
-  }, [incidents, filters]);
+  }, [incidents, filters, getDateRange]);
 
   // Get the currently displayed incidents with balanced mix
   const displayedIncidents = useMemo(() => {

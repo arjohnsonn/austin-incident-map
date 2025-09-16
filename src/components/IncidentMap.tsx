@@ -173,7 +173,7 @@ export function IncidentMap({
         map.current = null;
       }
     };
-  }, []);
+  }, [resolvedTheme]);
 
   // Update map style when theme changes
   useEffect(() => {
@@ -492,7 +492,7 @@ export function IncidentMap({
         : firstIncident.traffic_report_id;
       markers.current.set(markerId, marker);
     });
-  }, [incidents, selectedIncident, onIncidentSelect, mapLoaded]);
+  }, [incidents, selectedIncident, onIncidentSelect, mapLoaded, resolvedTheme]);
 
   // Fly to selected incident
   useEffect(() => {

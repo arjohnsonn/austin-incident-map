@@ -32,7 +32,7 @@ export default function Home() {
     if (isManualRefresh && lastUpdated) {
       toast.success('Incidents refreshed successfully');
     }
-  }, [isManualRefresh]);
+  }, [isManualRefresh, lastUpdated]);
 
   if (incidents.length === 0) {
     return (

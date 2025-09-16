@@ -1,6 +1,22 @@
 import { useState, useEffect, useCallback } from 'react';
 import { FireIncident } from '@/types/incident';
 
+interface RawIncidentData {
+  traffic_report_id: string;
+  published_date: string;
+  issue_reported: string;
+  location?: {
+    type: string;
+    coordinates: [number, number];
+  };
+  latitude: string;
+  longitude: string;
+  address: string;
+  traffic_report_status: 'ACTIVE' | 'ARCHIVED';
+  traffic_report_status_date_time: string;
+  agency: string;
+}
+
 // Get recent data, ordered by published_date descending (newest first)
 const FIRE_API_ENDPOINT = 'https://data.austintexas.gov/resource/wpu4-x69d.json?$order=published_date DESC&$limit=200';
 const TRAFFIC_API_ENDPOINT = 'https://data.austintexas.gov/resource/dx9v-zd7x.json?$order=published_date DESC&$limit=200';
@@ -32,13 +48,25 @@ export async function fetchFireIncidents(): Promise<FireIncident[]> {
       trafficResponse.json()
     ]);
 
-    const fireIncidents = (fireData as any[]).map(incident => ({
+    const fireIncidents: FireIncident[] = (fireData as RawIncidentData[]).map(incident => ({
       ...incident,
+      location: incident.location?.type === 'Point'
+        ? incident.location as { type: 'Point'; coordinates: [number, number] }
+        : {
+            type: 'Point' as const,
+            coordinates: [parseFloat(incident.longitude), parseFloat(incident.latitude)]
+          },
       incidentType: 'fire' as const
     }));
 
-    const trafficIncidents = (trafficData as any[]).map(incident => ({
+    const trafficIncidents: FireIncident[] = (trafficData as RawIncidentData[]).map(incident => ({
       ...incident,
+      location: incident.location?.type === 'Point'
+        ? incident.location as { type: 'Point'; coordinates: [number, number] }
+        : {
+            type: 'Point' as const,
+            coordinates: [parseFloat(incident.longitude), parseFloat(incident.latitude)]
+          },
       incidentType: 'traffic' as const
     }));
 
