@@ -93,28 +93,23 @@ export function useFireIncidents() {
 
       // Smart update: only update if data has actually changed
       setIncidents(prevIncidents => {
-        // If this is the first load, just set the data
         if (prevIncidents.length === 0) {
           return newData;
         }
 
-        // Create a map for quick lookup of existing incidents
         const existingMap = new Map(
           prevIncidents.map(incident => [incident.traffic_report_id, incident])
         );
 
-        // Check for changes
         let hasChanges = false;
         const updatedIncidents = newData.map(newIncident => {
           const existing = existingMap.get(newIncident.traffic_report_id);
 
           if (!existing) {
-            // New incident
             hasChanges = true;
             return newIncident;
           }
 
-          // Check if status or other key fields have changed
           if (
             existing.traffic_report_status !== newIncident.traffic_report_status ||
             existing.traffic_report_status_date_time !== newIncident.traffic_report_status_date_time ||
@@ -124,7 +119,6 @@ export function useFireIncidents() {
             return newIncident;
           }
 
-          // No changes, keep existing
           return existing;
         });
 
@@ -141,7 +135,6 @@ export function useFireIncidents() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch data');
     } finally {
-      // Reset manual refresh flag after completion
       if (manual) {
         setTimeout(() => setIsManualRefresh(false), 100);
       }

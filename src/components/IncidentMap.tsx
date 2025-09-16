@@ -481,7 +481,6 @@ export function IncidentMap({
       });
 
       markerEl.addEventListener("mouseleave", () => {
-        // Don't interfere if recently clicked
         if (isClicked) {
           return;
         }
