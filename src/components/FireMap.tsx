@@ -17,7 +17,47 @@ export function FireMap({ incidents, selectedIncident, onIncidentSelect }: FireM
   const map = useRef<maplibregl.Map | null>(null);
   const markers = useRef<Map<string, maplibregl.Marker>>(new Map());
   const [mapLoaded, setMapLoaded] = useState(false);
-  const { theme, resolvedTheme } = useTheme();
+  const { resolvedTheme } = useTheme();
+
+  // Add CSS for pulsing animation
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes pulse-ring {
+        0% {
+          transform: translate(-50%, -50%) scale(1);
+          opacity: 0.7;
+        }
+        100% {
+          transform: translate(-50%, -50%) scale(4);
+          opacity: 0;
+        }
+      }
+
+      .active-marker {
+        position: relative;
+      }
+
+      .active-marker::before {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 100%;
+        height: 100%;
+        border-radius: 50%;
+        background-color: #dc2626;
+        animation: pulse-ring 1.5s infinite;
+        pointer-events: none;
+        z-index: -1;
+      }
+    `;
+    document.head.appendChild(style);
+
+    return () => {
+      document.head.removeChild(style);
+    };
+  }, []);
 
   // Get the appropriate map style based on theme
   const getMapStyle = (currentTheme: string | undefined) => {
@@ -146,7 +186,7 @@ export function FireMap({ incidents, selectedIncident, onIncidentSelect }: FireM
         // Cluster marker with count
         markerEl.className = `relative rounded-full cursor-pointer flex items-center justify-center text-white text-xs font-bold ${
           hasActiveIncidents
-            ? 'w-6 h-6 bg-red-600 border-2 border-red-800'
+            ? 'w-6 h-6 bg-red-600 border-2 border-red-800 active-marker'
             : 'w-6 h-6 bg-gray-600 border-2 border-gray-800'
         }`;
         markerEl.textContent = group.length.toString();
@@ -157,7 +197,7 @@ export function FireMap({ incidents, selectedIncident, onIncidentSelect }: FireM
 
         markerEl.className = `w-4 h-4 rounded-full border-2 cursor-pointer ${
           isActive
-            ? 'border-red-600 bg-red-400'
+            ? 'border-red-600 bg-red-600 active-marker'
             : 'border-gray-600 bg-gray-400'
         }`;
       }
