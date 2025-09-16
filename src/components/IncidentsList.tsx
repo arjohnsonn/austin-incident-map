@@ -220,12 +220,20 @@ export function IncidentsList({ incidents, selectedIncident, onIncidentSelect, o
       if (filters.startDate || filters.endDate) {
         const incidentDate = new Date(incident.published_date);
 
-        if (filters.startDate && incidentDate < filters.startDate) {
-          return false;
+        if (filters.startDate) {
+          const startOfDay = new Date(filters.startDate);
+          startOfDay.setHours(0, 0, 0, 0);
+          if (incidentDate < startOfDay) {
+            return false;
+          }
         }
 
-        if (filters.endDate && incidentDate > filters.endDate) {
-          return false;
+        if (filters.endDate) {
+          const endOfDay = new Date(filters.endDate);
+          endOfDay.setHours(23, 59, 59, 999);
+          if (incidentDate > endOfDay) {
+            return false;
+          }
         }
       }
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { FireMap } from '@/components/FireMap';
 import { IncidentsList } from '@/components/IncidentsList';
@@ -16,6 +16,13 @@ export default function Home() {
   const handleDisplayedIncidentsChange = useCallback((incidents: FireIncident[]) => {
     setDisplayedIncidents(incidents);
   }, []);
+
+  // Initialize displayedIncidents with all incidents when first loaded
+  useEffect(() => {
+    if (incidents.length > 0 && displayedIncidents.length === 0) {
+      setDisplayedIncidents(incidents.slice(0, 50)); // Match initial display count
+    }
+  }, [incidents, displayedIncidents.length]);
 
   if (loading) {
     return (
@@ -61,7 +68,7 @@ export default function Home() {
 
         <ResizablePanel defaultSize={60} minSize={50}>
           <FireMap
-            incidents={displayedIncidents.length > 0 ? displayedIncidents : incidents}
+            incidents={displayedIncidents}
             selectedIncident={selectedIncident}
             onIncidentSelect={setSelectedIncident}
           />
