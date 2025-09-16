@@ -20,7 +20,6 @@ export function IncidentMap({
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const markers = useRef<Map<string, maplibregl.Marker>>(new Map());
-  const userLocationMarker = useRef<maplibregl.Marker | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [userLocation, setUserLocation] = useState<{lat: number; lng: number} | null>(null);
   const { resolvedTheme } = useTheme();
@@ -242,53 +241,6 @@ export function IncidentMap({
     map.current.setStyle(getMapStyle(resolvedTheme));
   }, [resolvedTheme, mapLoaded]);
 
-  // Add user location marker
-  useEffect(() => {
-    if (!map.current || !mapLoaded || !userLocation) return;
-
-    console.log('Creating user location marker at:', userLocation);
-
-    // Remove existing user location marker
-    if (userLocationMarker.current) {
-      userLocationMarker.current.remove();
-      userLocationMarker.current = null;
-    }
-
-    // Wait for map to be ready, then add marker
-    const addUserMarker = () => {
-      if (!map.current || !userLocation) return;
-
-      // Create user location marker element following the same pattern as incident markers
-      const userMarkerEl = document.createElement("div");
-      userMarkerEl.className = "w-4 h-4 rounded-full border-2 cursor-pointer border-white bg-blue-500 user-location-marker";
-      userMarkerEl.style.transformOrigin = "center center";
-
-      // Create and add the marker with the same configuration as incident markers
-      userLocationMarker.current = new maplibregl.Marker({
-        element: userMarkerEl,
-        anchor: "center",
-      })
-        .setLngLat([userLocation.lng, userLocation.lat])
-        .addTo(map.current);
-
-      console.log('User location marker added to map at:', [userLocation.lng, userLocation.lat]);
-    };
-
-    // Add marker immediately if map is loaded
-    if (map.current.loaded()) {
-      addUserMarker();
-    } else {
-      // Wait for map to load
-      map.current.once('idle', addUserMarker);
-    }
-
-    return () => {
-      if (userLocationMarker.current) {
-        userLocationMarker.current.remove();
-        userLocationMarker.current = null;
-      }
-    };
-  }, [userLocation, mapLoaded, resolvedTheme]);
 
   // Group incidents by location to handle clustering
   const groupIncidentsByLocation = (incidents: FireIncident[]) => {
@@ -331,6 +283,34 @@ export function IncidentMap({
     // Clear existing markers
     markers.current.forEach((marker) => marker.remove());
     markers.current.clear();
+
+    // Add user location marker first if available
+    if (userLocation) {
+      console.log('Adding user location marker at:', userLocation);
+
+      // Create user location marker element using exact same method as incidents
+      const userMarkerEl = document.createElement("div");
+      userMarkerEl.className = "w-4 h-4 rounded-full border-2 cursor-pointer border-white bg-blue-500 user-location-marker relative";
+
+      // Add radar ring for pulsing effect
+      const radarRing = document.createElement("div");
+      radarRing.className = "radar-ring";
+      radarRing.style.backgroundColor = "#3b82f6"; // blue color
+      userMarkerEl.appendChild(radarRing);
+
+      // Add hover effects without interfering with positioning
+      userMarkerEl.style.transformOrigin = "center center";
+
+      const userMarker = new maplibregl.Marker({
+        element: userMarkerEl,
+        anchor: "center",
+      })
+        .setLngLat([userLocation.lng, userLocation.lat])
+        .addTo(map.current!);
+
+      // Store user location marker
+      markers.current.set("user-location", userMarker);
+    }
 
     // Group incidents by location
     const incidentGroups = groupIncidentsByLocation(incidents);
@@ -617,7 +597,7 @@ export function IncidentMap({
         : firstIncident.traffic_report_id;
       markers.current.set(markerId, marker);
     });
-  }, [incidents, selectedIncident, onIncidentSelect, mapLoaded, resolvedTheme]);
+  }, [incidents, selectedIncident, onIncidentSelect, mapLoaded, resolvedTheme, userLocation]);
 
   // Fly to selected incident
   useEffect(() => {
