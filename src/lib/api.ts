@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { FireIncident } from '@/types/incident';
 
-// Get data from the last week, ordered by published_date descending (newest first)
-const FIRE_API_ENDPOINT = 'https://data.austintexas.gov/resource/wpu4-x69d.json?$order=published_date DESC&$limit=2000';
-const TRAFFIC_API_ENDPOINT = 'https://data.austintexas.gov/resource/dx9v-zd7x.json?$order=published_date DESC&$limit=2000';
+// Get recent data, ordered by published_date descending (newest first)
+const FIRE_API_ENDPOINT = 'https://data.austintexas.gov/resource/wpu4-x69d.json?$order=published_date DESC&$limit=200';
+const TRAFFIC_API_ENDPOINT = 'https://data.austintexas.gov/resource/dx9v-zd7x.json?$order=published_date DESC&$limit=200';
 
 export async function fetchFireIncidents(): Promise<FireIncident[]> {
   try {
@@ -51,21 +51,72 @@ export async function fetchFireIncidents(): Promise<FireIncident[]> {
 
 export function useFireIncidents() {
   const [incidents, setIncidents] = useState<FireIncident[]>([]);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [isManualRefresh, setIsManualRefresh] = useState(false);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (manual = false) => {
     try {
-      setLoading(true);
       setError(null);
-      const data = await fetchFireIncidents();
-      setIncidents(data);
+      if (manual) {
+        setIsManualRefresh(true);
+      }
+      const newData = await fetchFireIncidents();
+
+      // Smart update: only update if data has actually changed
+      setIncidents(prevIncidents => {
+        // If this is the first load, just set the data
+        if (prevIncidents.length === 0) {
+          return newData;
+        }
+
+        // Create a map for quick lookup of existing incidents
+        const existingMap = new Map(
+          prevIncidents.map(incident => [incident.traffic_report_id, incident])
+        );
+
+        // Check for changes
+        let hasChanges = false;
+        const updatedIncidents = newData.map(newIncident => {
+          const existing = existingMap.get(newIncident.traffic_report_id);
+
+          if (!existing) {
+            // New incident
+            hasChanges = true;
+            return newIncident;
+          }
+
+          // Check if status or other key fields have changed
+          if (
+            existing.traffic_report_status !== newIncident.traffic_report_status ||
+            existing.traffic_report_status_date_time !== newIncident.traffic_report_status_date_time ||
+            existing.published_date !== newIncident.published_date
+          ) {
+            hasChanges = true;
+            return newIncident;
+          }
+
+          // No changes, keep existing
+          return existing;
+        });
+
+        // Check if any incidents were removed
+        if (newData.length !== prevIncidents.length) {
+          hasChanges = true;
+        }
+
+        // Only update if there are actual changes
+        return hasChanges ? updatedIncidents : prevIncidents;
+      });
+
       setLastUpdated(new Date());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch data');
     } finally {
-      setLoading(false);
+      // Reset manual refresh flag after completion
+      if (manual) {
+        setTimeout(() => setIsManualRefresh(false), 100);
+      }
     }
   }, []);
 
@@ -78,5 +129,7 @@ export function useFireIncidents() {
     return () => clearInterval(interval);
   }, [fetchData]);
 
-  return { incidents, loading, error, lastUpdated, refetch: fetchData };
+  const manualRefetch = useCallback(() => fetchData(true), [fetchData]);
+
+  return { incidents, error, lastUpdated, isManualRefresh, refetch: manualRefetch };
 }
