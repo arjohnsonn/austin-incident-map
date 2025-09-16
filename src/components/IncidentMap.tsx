@@ -207,7 +207,21 @@ export function IncidentMap({
       navigator.geolocation.getCurrentPosition(
         (position) => {
           const { latitude, longitude } = position.coords;
-          setUserLocation({ lat: latitude, lng: longitude });
+          console.log('User location:', { latitude, longitude });
+
+          // Validate coordinates
+          if (
+            !isNaN(latitude) &&
+            !isNaN(longitude) &&
+            latitude >= -90 &&
+            latitude <= 90 &&
+            longitude >= -180 &&
+            longitude <= 180
+          ) {
+            setUserLocation({ lat: latitude, lng: longitude });
+          } else {
+            console.warn('Invalid user location coordinates:', { latitude, longitude });
+          }
         },
         (error) => {
           console.warn('Error getting user location:', error);
@@ -232,6 +246,8 @@ export function IncidentMap({
   useEffect(() => {
     if (!map.current || !userLocation) return;
 
+    console.log('Creating user location marker at:', userLocation);
+
     // Remove existing user location marker
     if (userLocationMarker.current) {
       userLocationMarker.current.remove();
@@ -248,6 +264,8 @@ export function IncidentMap({
     })
       .setLngLat([userLocation.lng, userLocation.lat])
       .addTo(map.current);
+
+    console.log('User location marker added to map');
 
     return () => {
       if (userLocationMarker.current) {
