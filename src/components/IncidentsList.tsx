@@ -2,7 +2,7 @@
 
 import { useState, useMemo, memo, useRef, useEffect, useCallback } from "react";
 import { format } from "date-fns";
-import { Search, Calendar, RefreshCw, Play, Pause, Trash2 } from "lucide-react";
+import { Search, Calendar, RefreshCw, Play, Pause, Trash2, Volume2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -321,7 +321,9 @@ const VirtualizedList = memo(
           {/* Table Header - now inside scrollable area */}
           <div className="bg-neutral-900 dark:bg-black text-white text-xs font-bold px-2 py-2 border-b-2 border-neutral-600 sticky top-0 z-10 min-w-[800px]">
             <div className="flex items-center">
-              <div style={{ width: columnWidths.play }} className="text-center flex-shrink-0">🔊</div>
+              <div style={{ width: columnWidths.play }} className="text-center flex-shrink-0 flex items-center justify-center">
+                <Volume2 className="w-3 h-3" />
+              </div>
               <div style={{ width: columnWidths.time }} className="text-center flex-shrink-0">TIME</div>
               <div style={{ width: columnWidths.callType }} className="px-2 flex-shrink-0">CALL TYPE</div>
               <div style={{ width: columnWidths.address }} className="px-2 flex-shrink-0">ADDRESS</div>
