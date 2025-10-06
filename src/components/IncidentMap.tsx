@@ -238,6 +238,10 @@ export function IncidentMap({
     const groups = new Map<string, FireIncident[]>();
 
     incidents.forEach((incident) => {
+      if (!incident.location || !incident.location.coordinates) {
+        return;
+      }
+
       const lng = parseFloat(incident.longitude);
       const lat = parseFloat(incident.latitude);
 

@@ -20,7 +20,7 @@ export interface FireIncident {
 }
 
 export type IncidentStatus = 'ACTIVE' | 'ARCHIVED' | 'ALL';
-export type DateRange = 'TODAY' | 'LAST_3_DAYS' | 'WEEK' | 'MONTH' | 'CUSTOM';
+export type DateRange = 'LAST_30_MINS' | 'LAST_HOUR' | 'LAST_4_HOURS' | 'LAST_12_HOURS' | 'TODAY' | 'WEEK' | 'CUSTOM';
 
 export interface FilterState {
   search: string;

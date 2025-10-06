@@ -5,43 +5,6 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-const CALL_TYPE_PATTERNS = [
-  { pattern: /still\s+box\s+alarm/i, type: 'Still Box Alarm' },
-  { pattern: /box\s+alarm/i, type: 'Box Alarm' },
-  { pattern: /carbon\s+monoxide(?:\s+detector)?(?:\s+activation)?/i, type: 'Carbon Monoxide Alarm' },
-  { pattern: /co\s+(?:detector|alarm)/i, type: 'Carbon Monoxide Alarm' },
-  { pattern: /smoke\s+(?:detector|alarm)(?:\s+activation)?/i, type: 'Smoke Alarm' },
-  { pattern: /fire\s+alarm(?:\s+activation)?/i, type: 'Fire Alarm' },
-  { pattern: /alarm\s+activation/i, type: 'Alarm Activation' },
-  { pattern: /\balarm\b(?!\s+(?:in|at))/i, type: 'Alarm' },
-  { pattern: /box\s+fire/i, type: 'Box Fire' },
-  { pattern: /structure\s+fire/i, type: 'Structure Fire' },
-  { pattern: /(?:house|building|apartment)\s+fire/i, type: 'Structure Fire' },
-  { pattern: /vehicle\s+fire/i, type: 'Vehicle Fire' },
-  { pattern: /car\s+fire/i, type: 'Vehicle Fire' },
-  { pattern: /grass\s+fire/i, type: 'Grass Fire' },
-  { pattern: /brush\s+fire/i, type: 'Brush Fire' },
-  { pattern: /trash\s+fire/i, type: 'Trash Fire' },
-  { pattern: /medical\s+(?:emergency|call)/i, type: 'Medical Emergency' },
-  { pattern: /cardiac\s+arrest/i, type: 'Cardiac Arrest' },
-  { pattern: /heart\s+attack/i, type: 'Cardiac Arrest' },
-  { pattern: /ems\s+call/i, type: 'EMS Call' },
-  { pattern: /stroke/i, type: 'Medical Emergency' },
-  { pattern: /unconscious/i, type: 'Medical Emergency' },
-  { pattern: /traffic\s+(?:accident|collision)/i, type: 'Traffic Accident' },
-  { pattern: /vehicle\s+(?:accident|collision)/i, type: 'Vehicle Accident' },
-  { pattern: /mvc/i, type: 'Motor Vehicle Collision' },
-  { pattern: /auto\s+accident/i, type: 'Traffic Accident' },
-  { pattern: /hazmat/i, type: 'Hazmat' },
-  { pattern: /gas\s+leak/i, type: 'Gas Leak' },
-  { pattern: /water\s+rescue/i, type: 'Water Rescue' },
-  { pattern: /technical\s+rescue/i, type: 'Technical Rescue' },
-  { pattern: /elevator\s+rescue/i, type: 'Elevator Rescue' },
-  { pattern: /smoke\s+investigation/i, type: 'Smoke Investigation' },
-  { pattern: /odor\s+investigation/i, type: 'Odor Investigation' },
-  { pattern: /assist\s+(?:ems|police)/i, type: 'Mutual Aid' },
-];
-
 const UNIT_PATTERNS = [
   /\b(?:engine|eng|e)\s*(\d+)\b/gi,
   /\b(?:ladder|lad|l)\s*(\d+)\b/gi,
@@ -87,12 +50,12 @@ export async function parseDispatchCallWithAI(transcript: string): Promise<Parse
           content: `You are a fire/EMS dispatch call parser. Extract structured information from dispatch audio transcripts.
 
 Extract:
-- callType: Type of emergency (e.g., "Structure Fire", "Carbon Monoxide Alarm", "Medical Emergency", "Box Alarm", "Still Box Alarm", "Traffic Accident", etc.)
+- callType: The EXACT call type/incident type as stated in the audio. Do not categorize or rename it - use the exact wording from the dispatch with proper Title Case capitalization (e.g., if they say "respiratory", use "Respiratory", if they say "lift assist", use "Lift Assist", if they say "traffic injury", use "Traffic Injury", if they say "chest pain", use "Chest Pain")
 - units: Array of responding units (e.g., ["Engine 13", "Truck 3", "Medic 5"])
 - channels: Array of tactical channels (e.g., ["F-TAC-203"])
 - address: Street address (e.g., "2328 Hartford Road")
 
-Return valid JSON only. If something isn't mentioned, use null or empty array.`
+Return valid JSON only. If something isn't mentioned, use null or empty array. For callType, use the dispatcher's exact wording with Title Case capitalization.`
         },
         {
           role: 'user',
@@ -139,18 +102,16 @@ export function parseDispatchCall(transcript: string): ParsedDispatchCall {
   console.log('Normalized (lowercase):', normalizedTranscript);
 
   let callType: string | null = null;
-  console.log('\nTesting call type patterns:');
-  for (const { pattern, type } of CALL_TYPE_PATTERNS) {
-    const matches = pattern.test(normalizedTranscript);
-    if (matches) {
-      console.log(`  ✓ MATCH: "${pattern}" → ${type}`);
-      callType = type;
-      break;
-    }
-  }
+  console.log('\nExtracting call type from transcript:');
 
-  if (!callType) {
-    console.log('  ✗ No call type pattern matched');
+  const callTypeMatch = cleanedTranscript.match(/(?:^|\s|,)\s*([A-Za-z\s]+?)\s+(?:in|at|on|for)\s+(?:AFD|ASD|AFV)\s+box/i);
+  if (callTypeMatch) {
+    callType = callTypeMatch[1].trim();
+    const words = callType.split(/\s+/);
+    callType = words.map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+    console.log(`  ✓ Extracted call type: "${callType}"`);
+  } else {
+    console.log('  ✗ No call type extracted');
   }
 
   const units: string[] = [];

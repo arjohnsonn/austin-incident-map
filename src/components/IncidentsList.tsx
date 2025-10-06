@@ -2,9 +2,14 @@
 
 import { useState, useMemo, memo, useRef, useEffect, useCallback } from "react";
 import { format } from "date-fns";
-import { Search, Calendar, RefreshCw, Play, Pause, Clock } from "lucide-react";
+import { Search, Calendar, RefreshCw, Play, Pause } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   Select,
   SelectContent,
@@ -33,7 +38,7 @@ interface IncidentsListProps {
   loading?: boolean;
   lastUpdated?: Date | null;
   onRefresh?: () => void;
-  onSetPosition?: (pos: number) => void;
+  onFetchInitial?: () => void;
 }
 
 const ITEM_HEIGHT = 32;
@@ -54,6 +59,18 @@ const VirtualizedList = memo(
     const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
+    const [columnWidths, setColumnWidths] = useState({
+      play: 32,
+      time: 80,
+      callType: 168,
+      address: 192,
+      units: 128,
+      channels: 96,
+      status: 64,
+    });
+    const resizingColumn = useRef<string | null>(null);
+    const startX = useRef<number>(0);
+    const startWidth = useRef<number>(0);
 
     useEffect(() => {
       const container = containerRef.current;
@@ -73,6 +90,39 @@ const VirtualizedList = memo(
     const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
       setScrollTop(e.currentTarget.scrollTop);
     }, []);
+
+    const handleResizeStart = useCallback((e: React.MouseEvent, column: string) => {
+      e.preventDefault();
+      e.stopPropagation();
+      resizingColumn.current = column;
+      startX.current = e.clientX;
+      startWidth.current = columnWidths[column as keyof typeof columnWidths];
+    }, [columnWidths]);
+
+    const handleResizeMove = useCallback((e: MouseEvent) => {
+      if (!resizingColumn.current) return;
+      const diff = e.clientX - startX.current;
+      const newWidth = Math.max(50, startWidth.current + diff);
+      setColumnWidths(prev => ({
+        ...prev,
+        [resizingColumn.current!]: newWidth,
+      }));
+    }, []);
+
+    const handleResizeEnd = useCallback(() => {
+      resizingColumn.current = null;
+    }, []);
+
+    useEffect(() => {
+      if (resizingColumn.current) {
+        document.addEventListener('mousemove', handleResizeMove);
+        document.addEventListener('mouseup', handleResizeEnd);
+        return () => {
+          document.removeEventListener('mousemove', handleResizeMove);
+          document.removeEventListener('mouseup', handleResizeEnd);
+        };
+      }
+    }, [handleResizeMove, handleResizeEnd]);
 
     const formatDate = (dateString: string) => {
       try {
@@ -149,8 +199,8 @@ const VirtualizedList = memo(
           }
           onClick={() => onIncidentSelect(incident)}
         >
-          <div className="flex items-center h-full px-2 text-xs">
-            <div className="w-8 flex items-center justify-center">
+          <div className="flex items-center h-full px-2 text-xs relative">
+            <div style={{ width: columnWidths.play }} className="flex items-center justify-center flex-shrink-0">
               {incident.audioUrl ? (
                 <button
                   onClick={(e) => handlePlayAudio(e, incident)}
@@ -167,26 +217,60 @@ const VirtualizedList = memo(
                 <div className="w-3 h-3" />
               )}
             </div>
-            <div className="w-20 text-center text-neutral-500 dark:text-neutral-400 font-mono">
+            <div style={{ width: columnWidths.time }} className="text-center text-neutral-500 dark:text-neutral-400 font-mono flex-shrink-0 relative group">
               {formatDate(incident.published_date)}
+              <div
+                className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-500 opacity-0 group-hover:opacity-100"
+                onMouseDown={(e) => handleResizeStart(e, 'time')}
+              />
             </div>
-            <div className="w-42 px-2 truncate font-medium">
+            <div style={{ width: columnWidths.callType }} className="px-2 truncate font-medium flex-shrink-0 relative group">
               {incident.issue_reported}
+              <div
+                className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-500 opacity-0 group-hover:opacity-100"
+                onMouseDown={(e) => handleResizeStart(e, 'callType')}
+              />
             </div>
-            <div className="w-48 px-2 truncate text-neutral-600 dark:text-neutral-400">
-              {incident.address}
+            <div style={{ width: columnWidths.address }} className="px-2 truncate text-neutral-600 dark:text-neutral-400 flex-shrink-0 relative group">
+              {incident.location ? incident.address : '?'}
+              <div
+                className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-500 opacity-0 group-hover:opacity-100"
+                onMouseDown={(e) => handleResizeStart(e, 'address')}
+              />
             </div>
-            <div className="w-32 px-2 truncate text-blue-600 dark:text-blue-400 text-xs">
-              {incident.units && incident.units.length > 0
-                ? incident.units.join(', ')
-                : '-'}
-            </div>
-            <div className="w-24 px-2 truncate text-purple-600 dark:text-purple-400 text-xs">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div style={{ width: columnWidths.units }} className="px-2 truncate text-blue-600 dark:text-blue-400 text-xs flex-shrink-0 relative group cursor-help">
+                  {incident.units && incident.units.length > 0
+                    ? incident.units.join(', ')
+                    : '-'}
+                  <div
+                    className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-500 opacity-0 group-hover:opacity-100"
+                    onMouseDown={(e) => handleResizeStart(e, 'units')}
+                  />
+                </div>
+              </TooltipTrigger>
+              {incident.units && incident.units.length > 0 && (
+                <TooltipContent>
+                  <div className="font-semibold mb-1">Responding Units:</div>
+                  <div className="space-y-0.5">
+                    {incident.units.map((unit, idx) => (
+                      <div key={idx}>{unit}</div>
+                    ))}
+                  </div>
+                </TooltipContent>
+              )}
+            </Tooltip>
+            <div style={{ width: columnWidths.channels }} className="px-2 truncate text-purple-600 dark:text-purple-400 text-xs flex-shrink-0 relative group">
               {incident.channels && incident.channels.length > 0
                 ? incident.channels.join(', ')
                 : '-'}
+              <div
+                className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-500 opacity-0 group-hover:opacity-100"
+                onMouseDown={(e) => handleResizeStart(e, 'channels')}
+              />
             </div>
-            <div className="w-16 text-center">
+            <div style={{ width: columnWidths.status }} className="text-center flex-shrink-0">
               <span
                 className={`inline-block px-2 py-1 text-xs font-bold rounded ${
                   incident.traffic_report_status === "ACTIVE"
@@ -219,13 +303,13 @@ const VirtualizedList = memo(
           {/* Table Header - now inside scrollable area */}
           <div className="bg-neutral-900 dark:bg-black text-white text-xs font-bold px-2 py-2 border-b-2 border-neutral-600 sticky top-0 z-10 min-w-[800px]">
             <div className="flex items-center">
-              <div className="w-8 text-center">🔊</div>
-              <div className="w-20 text-center">TIME</div>
-              <div className="w-42 px-2">CALL TYPE</div>
-              <div className="w-48 px-2">ADDRESS</div>
-              <div className="w-32 px-2">UNITS</div>
-              <div className="w-24 px-2">CHANNEL</div>
-              <div className="w-16 text-center">STATUS</div>
+              <div style={{ width: columnWidths.play }} className="text-center flex-shrink-0">🔊</div>
+              <div style={{ width: columnWidths.time }} className="text-center flex-shrink-0">TIME</div>
+              <div style={{ width: columnWidths.callType }} className="px-2 flex-shrink-0">CALL TYPE</div>
+              <div style={{ width: columnWidths.address }} className="px-2 flex-shrink-0">ADDRESS</div>
+              <div style={{ width: columnWidths.units }} className="px-2 flex-shrink-0">UNITS</div>
+              <div style={{ width: columnWidths.channels }} className="px-2 flex-shrink-0">CHANNEL</div>
+              <div style={{ width: columnWidths.status }} className="text-center flex-shrink-0">STATUS</div>
             </div>
           </div>
 
@@ -246,12 +330,12 @@ export function IncidentsList({
   loading,
   lastUpdated,
   onRefresh,
-  onSetPosition,
+  onFetchInitial,
 }: IncidentsListProps) {
   const [filters, setFilters] = useState<FilterState>({
     search: "",
     status: "ACTIVE",
-    dateRange: "WEEK",
+    dateRange: "LAST_12_HOURS",
     startDate: undefined,
     endDate: undefined,
     agency: "ALL",
@@ -266,32 +350,42 @@ export function IncidentsList({
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
     switch (range) {
+      case "LAST_30_MINS":
+        return {
+          start: new Date(now.getTime() - 30 * 60 * 1000),
+          end: now,
+        };
+      case "LAST_HOUR":
+        return {
+          start: new Date(now.getTime() - 60 * 60 * 1000),
+          end: now,
+        };
+      case "LAST_4_HOURS":
+        return {
+          start: new Date(now.getTime() - 4 * 60 * 60 * 1000),
+          end: now,
+        };
+      case "LAST_12_HOURS":
+        return {
+          start: new Date(now.getTime() - 12 * 60 * 60 * 1000),
+          end: now,
+        };
       case "TODAY":
         return {
           start: today,
           end: new Date(today.getTime() + 24 * 60 * 60 * 1000),
-        };
-      case "LAST_3_DAYS":
-        return {
-          start: new Date(today.getTime() - 3 * 24 * 60 * 60 * 1000),
-          end: new Date(),
         };
       case "WEEK":
         return {
           start: new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000),
           end: new Date(),
         };
-      case "MONTH":
-        return {
-          start: new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000),
-          end: new Date(),
-        };
       case "CUSTOM":
         return { start: filters.startDate, end: filters.endDate };
       default:
         return {
-          start: new Date(today.getTime() - 3 * 24 * 60 * 60 * 1000),
-          end: new Date(),
+          start: new Date(now.getTime() - 12 * 60 * 60 * 1000),
+          end: now,
         };
     }
   }, [filters.startDate, filters.endDate]);
@@ -376,22 +470,13 @@ export function IncidentsList({
     setFilters({
       search: "",
       status: "ACTIVE",
-      dateRange: "WEEK",
+      dateRange: "LAST_12_HOURS",
       startDate: undefined,
       endDate: undefined,
       agency: "ALL",
     });
   };
 
-  const fetchLast12Hours = useCallback(() => {
-    if (!onSetPosition) return;
-    const now = Date.now();
-    const twelveHoursAgo = Math.floor((now - (12 * 60 * 60 * 1000)) / 1000);
-    onSetPosition(twelveHoursAgo);
-    if (onRefresh) {
-      onRefresh();
-    }
-  }, [onSetPosition, onRefresh]);
 
 
   useEffect(() => {
@@ -437,16 +522,6 @@ export function IncidentsList({
             )}
           </div>
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={fetchLast12Hours}
-              disabled={loading}
-              className="gap-2"
-            >
-              <Clock className="h-3 w-3" />
-              Last 12 Hours
-            </Button>
             <Button
               variant="outline"
               size="sm"
@@ -525,10 +600,12 @@ export function IncidentsList({
               <SelectValue placeholder="Date Range" />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="LAST_30_MINS">Last 30 Mins</SelectItem>
+              <SelectItem value="LAST_HOUR">Last Hour</SelectItem>
+              <SelectItem value="LAST_4_HOURS">Last 4 Hours</SelectItem>
+              <SelectItem value="LAST_12_HOURS">Last 12 Hours</SelectItem>
               <SelectItem value="TODAY">Today</SelectItem>
-              <SelectItem value="LAST_3_DAYS">Last 3 Days</SelectItem>
               <SelectItem value="WEEK">Week</SelectItem>
-              <SelectItem value="MONTH">Month</SelectItem>
               <SelectItem value="CUSTOM">Custom</SelectItem>
             </SelectContent>
           </Select>
@@ -568,7 +645,7 @@ export function IncidentsList({
           {(filters.search ||
             filters.status !== "ALL" ||
             filters.agency !== "ALL" ||
-            filters.dateRange !== "WEEK" ||
+            filters.dateRange !== "LAST_12_HOURS" ||
             filters.startDate ||
             filters.endDate) && (
             <Button variant="ghost" size="sm" onClick={clearFilters}>

@@ -11,23 +11,190 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-async function geocodeAddress(address: string): Promise<[number, number] | null> {
+function preprocessAddress(address: string): string[] {
+  let cleaned = address;
+
+  console.log(`Preprocessing address: "${address}"`);
+
+  cleaned = cleaned.replace(/\b(Southbound|Northbound|Eastbound|Westbound)\b/gi, '');
+
+  cleaned = cleaned.replace(/\bSouth Interstate Highway 35\b/gi, 'I-35 South');
+  cleaned = cleaned.replace(/\bNorth Interstate Highway 35\b/gi, 'I-35 North');
+  cleaned = cleaned.replace(/\bInterstate Highway 35\b/gi, 'I-35');
+
+  const rangeMatch = cleaned.match(/(\d+)-\d+\s+(.+)/);
+  if (rangeMatch) {
+    cleaned = `${rangeMatch[1]} ${rangeMatch[2]}`;
+    console.log(`  → Converted range to: "${cleaned}"`);
+  }
+
+  cleaned = cleaned.replace(/\s+to\s+.+?(Ramp|ramp)$/i, '');
+
+  cleaned = cleaned.replace(/\s+/g, ' ').trim();
+
+  console.log(`  → Final cleaned: "${cleaned}"`);
+
+  const variations = [cleaned];
+
+  if (cleaned.match(/\bI-35\b/i)) {
+    const simplified = cleaned.replace(/\bI-35\s+(North|South)\b/gi, 'I-35');
+    if (simplified !== cleaned) {
+      variations.push(simplified);
+    }
+  }
+
+  return variations;
+}
+
+function levenshteinDistance(str1: string, str2: string): number {
+  const matrix: number[][] = [];
+
+  for (let i = 0; i <= str2.length; i++) {
+    matrix[i] = [i];
+  }
+
+  for (let j = 0; j <= str1.length; j++) {
+    matrix[0][j] = j;
+  }
+
+  for (let i = 1; i <= str2.length; i++) {
+    for (let j = 1; j <= str1.length; j++) {
+      if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+        matrix[i][j] = matrix[i - 1][j - 1];
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1,
+          matrix[i][j - 1] + 1,
+          matrix[i - 1][j] + 1
+        );
+      }
+    }
+  }
+
+  return matrix[str2.length][str1.length];
+}
+
+async function fuzzyStreetSearch(address: string): Promise<[number, number] | null> {
+  const streetMatch = address.match(/\d+\s+(.+?)(?:\s+(?:Street|St|Avenue|Ave|Boulevard|Blvd|Drive|Dr|Road|Rd|Lane|Ln|Way|Court|Ct|Circle|Cir))?$/i);
+
+  if (!streetMatch) {
+    console.log('  → Could not extract street name for fuzzy search');
+    return null;
+  }
+
+  const streetName = streetMatch[1].trim();
+  console.log(`  → Attempting fuzzy search for street: "${streetName}"`);
+
   try {
     const response = await fetch(
-      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address + ', Austin, TX')}&format=json&limit=1`,
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(streetName + ' Austin TX')}&format=json&limit=10&countrycodes=us`,
       {
         headers: {
           'User-Agent': 'Austin-Fire-Map/1.0',
         },
       }
     );
-    const data = await response.json();
-    if (data && data.length > 0) {
-      return [parseFloat(data[0].lon), parseFloat(data[0].lat)];
+    const results = await response.json();
+
+    if (!results || results.length === 0) {
+      console.log('  → No fuzzy matches found');
+      return null;
     }
+
+    let bestMatch: any = null;
+    let bestDistance = Infinity;
+
+    for (const result of results) {
+      const displayName = result.display_name.toLowerCase();
+      const streetNameLower = streetName.toLowerCase();
+
+      const distance = levenshteinDistance(streetNameLower, result.display_name.toLowerCase());
+
+      if (distance < bestDistance && displayName.includes('austin') && displayName.includes('texas')) {
+        bestDistance = distance;
+        bestMatch = result;
+      }
+    }
+
+    if (bestMatch && bestDistance <= 3) {
+      console.log(`  → ✓ Fuzzy match found (distance: ${bestDistance}): ${bestMatch.display_name}`);
+
+      const houseNumber = address.match(/^\d+/)?.[0];
+      if (houseNumber) {
+        const streetFromMatch = bestMatch.display_name.split(',')[0];
+        const correctedAddress = `${houseNumber} ${streetFromMatch}`;
+        console.log(`  → Trying corrected address: "${correctedAddress}"`);
+
+        const verifyResponse = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(correctedAddress + ', Austin, TX')}&format=json&limit=1&countrycodes=us`,
+          {
+            headers: {
+              'User-Agent': 'Austin-Fire-Map/1.0',
+            },
+          }
+        );
+        const verifyData = await verifyResponse.json();
+
+        if (verifyData && verifyData.length > 0) {
+          console.log(`  → ✓✓ Verified corrected address!`);
+          return [parseFloat(verifyData[0].lon), parseFloat(verifyData[0].lat)];
+        }
+      }
+
+      return [parseFloat(bestMatch.lon), parseFloat(bestMatch.lat)];
+    }
+
+    console.log(`  → No close fuzzy matches (best distance: ${bestDistance})`);
   } catch (error) {
-    console.error('Geocoding error:', error);
+    console.error('  → Fuzzy search error:', error);
   }
+
+  return null;
+}
+
+async function geocodeAddress(address: string): Promise<[number, number] | null> {
+  const addressVariations = preprocessAddress(address);
+
+  for (const cleanedAddress of addressVariations) {
+    const searchQueries = [
+      `${cleanedAddress}, Austin, TX`,
+      `${cleanedAddress}, Austin, Texas`,
+      `${cleanedAddress}, Travis County, TX`,
+    ];
+
+    for (const query of searchQueries) {
+      try {
+        console.log(`Trying geocode query: ${query}`);
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=3&countrycodes=us`,
+          {
+            headers: {
+              'User-Agent': 'Austin-Fire-Map/1.0',
+            },
+          }
+        );
+        const data = await response.json();
+
+        if (data && data.length > 0) {
+          const result = data[0];
+          console.log(`✓ Geocoding successful: [${result.lon}, ${result.lat}] - ${result.display_name}`);
+          return [parseFloat(result.lon), parseFloat(result.lat)];
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 100));
+      } catch (error) {
+        console.error(`Geocoding error for query "${query}":`, error);
+      }
+    }
+  }
+
+  console.log(`⚠️ Exact geocoding failed, trying fuzzy street name matching...`);
+  const fuzzyResult = await fuzzyStreetSearch(address);
+  if (fuzzyResult) {
+    return fuzzyResult;
+  }
+
+  console.log(`❌ All geocoding attempts failed for: ${address}`);
   return null;
 }
 
@@ -54,13 +221,16 @@ export async function GET(request: NextRequest) {
     console.log('\n=== BROADCASTIFY LIVE CALLS API START ===');
     const searchParams = request.nextUrl.searchParams;
     const pos = searchParams.get('pos');
-    console.log('Request params - pos:', pos);
+    const init = searchParams.get('init');
+    console.log('Request params - pos:', pos, 'init:', init);
 
     const auth = await authenticateUser();
     const jwt = generateBroadcastifyJWT(auth.uid, auth.token);
 
     let url = `${BROADCASTIFY_LIVE_ENDPOINT}?groups=${GROUP_ID}`;
-    if (pos) {
+    if (init === '1') {
+      url += '&init=1';
+    } else if (pos) {
       url += `&pos=${pos}`;
     }
 
@@ -80,6 +250,11 @@ export async function GET(request: NextRequest) {
     }
 
     const data: BroadcastifyLiveResponse = await response.json();
+
+    console.log('\n=== RAW BROADCASTIFY RESPONSE ===');
+    console.log(JSON.stringify(data, null, 2));
+    console.log('=== END RAW RESPONSE ===\n');
+
     console.log('Broadcastify response data:');
     console.log('  serverTime:', data.serverTime, new Date(data.serverTime * 1000).toISOString());
     console.log('  lastPos:', data.lastPos, new Date(data.lastPos * 1000).toISOString());
@@ -101,9 +276,7 @@ export async function GET(request: NextRequest) {
       console.log('  No new calls received');
     }
 
-    const processedIncidents: DispatchIncident[] = [];
-
-    for (const call of data.calls) {
+    async function processCall(call: any): Promise<DispatchIncident | null> {
       try {
         console.log(`\n--- Processing call ${call.ts} ---`);
         console.log('Downloading audio from:', call.url);
@@ -115,7 +288,7 @@ export async function GET(request: NextRequest) {
 
         if (!parsed.address) {
           console.log('❌ Skipping - missing address');
-          continue;
+          return null;
         }
 
         const finalCallType = parsed.callType || 'Fire/EMS Call';
@@ -124,21 +297,16 @@ export async function GET(request: NextRequest) {
         const coordinates = await geocodeAddress(parsed.address);
         console.log('Coordinates:', coordinates);
 
-        if (!coordinates) {
-          console.log('❌ Skipping - geocoding failed');
-          continue;
-        }
-
         const incident: DispatchIncident = {
           id: `${call.groupId}-${call.ts}-${call.start_ts}`,
           callType: finalCallType,
           units: parsed.units,
           channels: parsed.channels,
           address: parsed.address,
-          location: {
+          location: coordinates ? {
             type: 'Point',
             coordinates,
-          },
+          } : undefined as any,
           timestamp: new Date(call.ts * 1000),
           audioUrl: call.url,
           rawTranscript: transcript,
@@ -146,20 +314,61 @@ export async function GET(request: NextRequest) {
           duration: call.duration,
         };
 
-        console.log('✓ Successfully processed incident:', incident.id);
-        processedIncidents.push(incident);
+        if (coordinates) {
+          console.log('✓ Successfully processed incident with coordinates:', incident.id);
+        } else {
+          console.log('⚠️ Processed incident WITHOUT coordinates (will show in list only):', incident.id);
+        }
+
+        return incident;
       } catch (error) {
         console.error(`❌ Error processing call ${call.ts}:`, error);
+        return null;
       }
     }
 
+    const BATCH_SIZE = 5;
+    const processedIncidents: DispatchIncident[] = [];
+
+    for (let i = 0; i < data.calls.length; i += BATCH_SIZE) {
+      const batch = data.calls.slice(i, i + BATCH_SIZE);
+      console.log(`\n🔄 Processing batch ${Math.floor(i / BATCH_SIZE) + 1} (calls ${i + 1}-${Math.min(i + BATCH_SIZE, data.calls.length)})`);
+
+      const results = await Promise.all(batch.map(call => processCall(call)));
+      const validIncidents = results.filter((incident): incident is DispatchIncident => incident !== null);
+      processedIncidents.push(...validIncidents);
+
+      console.log(`✓ Batch complete: ${validIncidents.length}/${batch.length} successful`);
+    }
+
+    console.log('\nDeduplicating incidents by address...');
+    const seenAddresses = new Set<string>();
+    const deduplicated = processedIncidents.filter(incident => {
+      const key = incident.address.trim().toLowerCase();
+      if (seenAddresses.has(key)) {
+        console.log(`  → Removing duplicate address: ${incident.id} (${incident.address})`);
+        return false;
+      }
+      seenAddresses.add(key);
+      return true;
+    });
+    console.log(`Deduplication: ${processedIncidents.length} → ${deduplicated.length} incidents`);
+
+    const skippedCount = data.calls.length - processedIncidents.length;
+    const duplicateCount = processedIncidents.length - deduplicated.length;
+
     console.log('\n=== SUMMARY ===');
     console.log('Total calls received:', data.calls.length);
-    console.log('Successfully processed:', processedIncidents.length);
+    console.log('Skipped (no address/errors):', skippedCount);
+    console.log('After processing:', processedIncidents.length);
+    console.log('Duplicates removed:', duplicateCount);
+    console.log('Final incidents:', deduplicated.length);
+    console.log('  - With coordinates:', deduplicated.filter(i => i.location).length);
+    console.log('  - Without coordinates:', deduplicated.filter(i => !i.location).length);
     console.log('=== BROADCASTIFY LIVE CALLS API END ===\n');
 
     return NextResponse.json({
-      incidents: processedIncidents,
+      incidents: deduplicated,
       lastPos: data.lastPos,
       serverTime: data.serverTime,
     });
