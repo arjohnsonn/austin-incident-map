@@ -354,21 +354,58 @@ export async function GET(request: NextRequest) {
     });
     console.log(`Deduplication: ${processedIncidents.length} → ${deduplicated.length} incidents`);
 
+    console.log('\nRemoving reassigned units...');
+    const sorted = [...deduplicated].sort((a, b) =>
+      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+
+    const assignedUnits = new Set<string>();
+    const withoutReassignedUnits: DispatchIncident[] = [];
+
+    for (const incident of sorted) {
+      if (!incident.units || incident.units.length === 0) {
+        withoutReassignedUnits.push(incident);
+        continue;
+      }
+
+      const availableUnits = incident.units.filter(unit => !assignedUnits.has(unit));
+
+      if (availableUnits.length === 0) {
+        console.log(`  → Removing incident ${incident.id} at ${incident.address} (all units reassigned to newer calls)`);
+        continue;
+      }
+
+      if (availableUnits.length < incident.units.length) {
+        const removedUnits = incident.units.filter(unit => assignedUnits.has(unit));
+        console.log(`  → Removed units ${removedUnits.join(', ')} from ${incident.id} (reassigned to newer calls)`);
+      }
+
+      withoutReassignedUnits.push({
+        ...incident,
+        units: availableUnits,
+      });
+
+      availableUnits.forEach(unit => assignedUnits.add(unit));
+    }
+    console.log(`Unit reassignment: ${deduplicated.length} → ${withoutReassignedUnits.length} incidents`);
+
     const skippedCount = data.calls.length - processedIncidents.length;
     const duplicateCount = processedIncidents.length - deduplicated.length;
+    const reassignedCount = deduplicated.length - withoutReassignedUnits.length;
 
     console.log('\n=== SUMMARY ===');
     console.log('Total calls received:', data.calls.length);
     console.log('Skipped (no address/errors):', skippedCount);
     console.log('After processing:', processedIncidents.length);
     console.log('Duplicates removed:', duplicateCount);
-    console.log('Final incidents:', deduplicated.length);
-    console.log('  - With coordinates:', deduplicated.filter(i => i.location).length);
-    console.log('  - Without coordinates:', deduplicated.filter(i => !i.location).length);
+    console.log('Units reassigned (incidents removed):', reassignedCount);
+    console.log('Final incidents:', withoutReassignedUnits.length);
+    console.log('  - With coordinates:', withoutReassignedUnits.filter(i => i.location).length);
+    console.log('  - Without coordinates:', withoutReassignedUnits.filter(i => !i.location).length);
     console.log('=== BROADCASTIFY LIVE CALLS API END ===\n');
 
     return NextResponse.json({
-      incidents: deduplicated,
+      incidents: withoutReassignedUnits,
       lastPos: data.lastPos,
       serverTime: data.serverTime,
     });
