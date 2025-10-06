@@ -71,6 +71,7 @@ const VirtualizedList = memo(
       units: 128,
       channels: 96,
     });
+    const [isResizing, setIsResizing] = useState(false);
     const resizingColumn = useRef<string | null>(null);
     const startX = useRef<number>(0);
     const startWidth = useRef<number>(0);
@@ -100,6 +101,7 @@ const VirtualizedList = memo(
       resizingColumn.current = column;
       startX.current = e.clientX;
       startWidth.current = columnWidths[column as keyof typeof columnWidths];
+      setIsResizing(true);
     }, [columnWidths]);
 
     const handleResizeMove = useCallback((e: MouseEvent) => {
@@ -114,10 +116,11 @@ const VirtualizedList = memo(
 
     const handleResizeEnd = useCallback(() => {
       resizingColumn.current = null;
+      setIsResizing(false);
     }, []);
 
     useEffect(() => {
-      if (resizingColumn.current) {
+      if (isResizing) {
         document.addEventListener('mousemove', handleResizeMove);
         document.addEventListener('mouseup', handleResizeEnd);
         return () => {
@@ -125,7 +128,7 @@ const VirtualizedList = memo(
           document.removeEventListener('mouseup', handleResizeEnd);
         };
       }
-    }, [handleResizeMove, handleResizeEnd]);
+    }, [isResizing, handleResizeMove, handleResizeEnd]);
 
     const formatDate = (dateString: string) => {
       try {
@@ -321,14 +324,48 @@ const VirtualizedList = memo(
           {/* Table Header - now inside scrollable area */}
           <div className="bg-neutral-900 dark:bg-black text-white text-xs font-bold px-2 py-2 border-b-2 border-neutral-600 sticky top-0 z-10 min-w-[800px]">
             <div className="flex items-center">
-              <div style={{ width: columnWidths.play }} className="text-center flex-shrink-0 flex items-center justify-center">
+              <div style={{ width: columnWidths.play }} className="text-center flex-shrink-0 flex items-center justify-center relative">
                 <Volume2 className="w-3 h-3" />
+                <div
+                  className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-400 bg-neutral-700"
+                  onMouseDown={(e) => handleResizeStart(e, 'play')}
+                />
               </div>
-              <div style={{ width: columnWidths.time }} className="text-center flex-shrink-0">TIME</div>
-              <div style={{ width: columnWidths.callType }} className="px-2 flex-shrink-0">CALL TYPE</div>
-              <div style={{ width: columnWidths.address }} className="px-2 flex-shrink-0">ADDRESS</div>
-              <div style={{ width: columnWidths.units }} className="px-2 flex-shrink-0">UNITS</div>
-              <div style={{ width: columnWidths.channels }} className="px-2 flex-shrink-0">CHANNEL</div>
+              <div style={{ width: columnWidths.time }} className="text-center flex-shrink-0 relative">
+                TIME
+                <div
+                  className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-400 bg-neutral-700"
+                  onMouseDown={(e) => handleResizeStart(e, 'time')}
+                />
+              </div>
+              <div style={{ width: columnWidths.callType }} className="px-2 flex-shrink-0 relative">
+                CALL TYPE
+                <div
+                  className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-400 bg-neutral-700"
+                  onMouseDown={(e) => handleResizeStart(e, 'callType')}
+                />
+              </div>
+              <div style={{ width: columnWidths.address }} className="px-2 flex-shrink-0 relative">
+                ADDRESS
+                <div
+                  className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-400 bg-neutral-700"
+                  onMouseDown={(e) => handleResizeStart(e, 'address')}
+                />
+              </div>
+              <div style={{ width: columnWidths.units }} className="px-2 flex-shrink-0 relative">
+                UNITS
+                <div
+                  className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-400 bg-neutral-700"
+                  onMouseDown={(e) => handleResizeStart(e, 'units')}
+                />
+              </div>
+              <div style={{ width: columnWidths.channels }} className="px-2 flex-shrink-0 relative">
+                CHANNEL
+                <div
+                  className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-400 bg-neutral-700"
+                  onMouseDown={(e) => handleResizeStart(e, 'channels')}
+                />
+              </div>
             </div>
           </div>
 
