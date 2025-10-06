@@ -5,12 +5,13 @@ import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/componen
 import { IncidentMap } from '@/components/IncidentMap';
 import { IncidentsList } from '@/components/IncidentsList';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { LoadingScreen } from '@/components/LoadingScreen';
 import { useFireIncidents } from '@/lib/api';
 import { FireIncident } from '@/types/incident';
 import { toast } from 'sonner';
 
 export default function Home() {
-  const { incidents, error, lastUpdated, isManualRefresh, refetch, setPosition, fetchInitial } = useFireIncidents();
+  const { incidents, error, lastUpdated, isManualRefresh, isLoading, refetch, setPosition, fetchInitial } = useFireIncidents();
   const [selectedIncident, setSelectedIncident] = useState<FireIncident | null>(null);
   const [displayedIncidents, setDisplayedIncidents] = useState<FireIncident[]>([]);
 
@@ -24,12 +25,8 @@ export default function Home() {
     }
   }, [isManualRefresh, lastUpdated]);
 
-  if (incidents.length === 0) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-lg">Loading incidents...</div>
-      </div>
-    );
+  if (isLoading) {
+    return <LoadingScreen />;
   }
 
   if (error) {

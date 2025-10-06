@@ -33,8 +33,10 @@ async function fetchBroadcastifyLiveCalls(lastPos?: number, init?: boolean): Pro
 
     if (init) {
       url += '?init=1';
-    } else if (lastPos) {
+    } else if (lastPos && lastPos > 0) {
       url += `?pos=${lastPos}`;
+    } else {
+      url += '?init=1';
     }
 
     const response = await fetch(url);
@@ -141,6 +143,7 @@ export function useFireIncidents() {
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [isManualRefresh, setIsManualRefresh] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const lastPosRef = useRef<number>(0);
   const dispatchIncidentsRef = useRef<FireIncident[]>([]);
   const isInitializedRef = useRef(false);
@@ -236,8 +239,10 @@ export function useFireIncidents() {
       });
 
       setLastUpdated(new Date());
+      setIsLoading(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch data');
+      setIsLoading(false);
     } finally {
       isFetchingRef.current = false;
       if (manual) {
@@ -263,6 +268,7 @@ export function useFireIncidents() {
           console.log('Cached incident IDs:', parsed.map(i => i.traffic_report_id));
           dispatchIncidentsRef.current = parsed;
           setIncidents(parsed);
+          setIsLoading(false);
 
           lastPosRef.current = parseInt(cachedLastPos, 10);
           console.log('Loaded lastPos from cache:', lastPosRef.current, new Date(lastPosRef.current * 1000).toISOString());
@@ -310,5 +316,5 @@ export function useFireIncidents() {
     console.log('=== SET POSITION END ===\n');
   }, []);
 
-  return { incidents, error, lastUpdated, isManualRefresh, refetch: manualRefetch, setPosition, fetchInitial };
+  return { incidents, error, lastUpdated, isManualRefresh, isLoading, refetch: manualRefetch, setPosition, fetchInitial };
 }

@@ -11,6 +11,15 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error('Request timeout')), timeoutMs)
+    ),
+  ]);
+}
+
 function preprocessAddress(address: string): string[] {
   let cleaned = address;
 
@@ -49,35 +58,44 @@ function preprocessAddress(address: string): string[] {
 async function geocodeAddress(address: string): Promise<[number, number] | null> {
   const addressVariations = preprocessAddress(address);
 
-  for (const cleanedAddress of addressVariations) {
-    const searchQueries = [
-      `${cleanedAddress}, Austin, TX`,
-      `${cleanedAddress}, Austin, Texas`,
-      `${cleanedAddress}, Travis County, TX`,
-    ];
+  const allQueries = addressVariations.flatMap(cleanedAddress => [
+    `${cleanedAddress}, Austin, TX`,
+    `${cleanedAddress}, Travis County, TX`,
+  ]);
 
-    for (const query of searchQueries) {
-      try {
-        console.log(`Trying geocode query: ${query}`);
-        const response = await fetch(
-          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=3&countrycodes=us`,
-          {
-            headers: {
-              'User-Agent': 'Austin-Fire-Map/1.0',
-            },
-          }
-        );
-        const data = await response.json();
+  console.log(`Trying ${allQueries.length} geocode queries in parallel for: ${address}`);
 
-        if (data && data.length > 0) {
-          const result = data[0];
-          console.log(`✓ Geocoding successful: [${result.lon}, ${result.lat}] - ${result.display_name}`);
-          return [parseFloat(result.lon), parseFloat(result.lat)];
+  const geocodeAttempts = allQueries.map(query =>
+    withTimeout(
+      fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=us`,
+        {
+          headers: {
+            'User-Agent': 'Austin-Fire-Map/1.0',
+          },
         }
-      } catch (error) {
-        console.error(`Geocoding error for query "${query}":`, error);
-      }
-    }
+      )
+        .then(response => response.json())
+        .then(data => {
+          if (data && data.length > 0) {
+            const result = data[0];
+            console.log(`✓ Geocoding successful: [${result.lon}, ${result.lat}] - ${result.display_name}`);
+            return [parseFloat(result.lon), parseFloat(result.lat)] as [number, number];
+          }
+          return null;
+        }),
+      5000
+    ).catch(error => {
+      console.log(`Geocode attempt failed for "${query}":`, error.message);
+      return null;
+    })
+  );
+
+  const results = await Promise.all(geocodeAttempts);
+  const firstSuccess = results.find(result => result !== null);
+
+  if (firstSuccess) {
+    return firstSuccess;
   }
 
   console.log(`❌ All geocoding attempts failed for: ${address}`);
@@ -214,7 +232,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const BATCH_SIZE = 15;
+    const BATCH_SIZE = 25;
     const processedIncidents: DispatchIncident[] = [];
 
     for (let i = 0; i < data.calls.length; i += BATCH_SIZE) {
