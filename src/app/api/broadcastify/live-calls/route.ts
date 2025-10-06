@@ -263,21 +263,52 @@ export async function GET(request: NextRequest) {
     }
     console.log(`Unit reassignment: ${processedIncidents.length} → ${finalIncidents.length} incidents`);
 
+    console.log('\nRemoving duplicate address+callType combinations...');
+    const seenAddressCallType = new Map<string, DispatchIncident>();
+    const deduplicated: DispatchIncident[] = [];
+
+    for (const incident of finalIncidents) {
+      const key = `${incident.address.trim().toLowerCase()}|||${incident.callType.toLowerCase()}`;
+      const existing = seenAddressCallType.get(key);
+
+      if (existing) {
+        const existingTime = new Date(existing.timestamp).getTime();
+        const currentTime = new Date(incident.timestamp).getTime();
+
+        if (currentTime > existingTime) {
+          console.log(`  → Replacing older duplicate: ${existing.id} with newer ${incident.id} at ${incident.address}`);
+          const index = deduplicated.indexOf(existing);
+          if (index !== -1) {
+            deduplicated[index] = incident;
+          }
+          seenAddressCallType.set(key, incident);
+        } else {
+          console.log(`  → Skipping older duplicate: ${incident.id} at ${incident.address}`);
+        }
+      } else {
+        deduplicated.push(incident);
+        seenAddressCallType.set(key, incident);
+      }
+    }
+    console.log(`Address+CallType deduplication: ${finalIncidents.length} → ${deduplicated.length} incidents`);
+
     const skippedCount = data.calls.length - processedIncidents.length;
     const reassignedCount = processedIncidents.length - finalIncidents.length;
+    const duplicateCount = finalIncidents.length - deduplicated.length;
 
     console.log('\n=== SUMMARY ===');
     console.log('Total calls received:', data.calls.length);
     console.log('Skipped (no address/errors):', skippedCount);
     console.log('After processing:', processedIncidents.length);
     console.log('Units reassigned (incidents removed):', reassignedCount);
-    console.log('Final incidents:', finalIncidents.length);
-    console.log('  - With coordinates:', finalIncidents.filter(i => i.location).length);
-    console.log('  - Without coordinates:', finalIncidents.filter(i => !i.location).length);
+    console.log('Duplicate address+callType removed:', duplicateCount);
+    console.log('Final incidents:', deduplicated.length);
+    console.log('  - With coordinates:', deduplicated.filter(i => i.location).length);
+    console.log('  - Without coordinates:', deduplicated.filter(i => !i.location).length);
     console.log('=== BROADCASTIFY LIVE CALLS API END ===\n');
 
     return NextResponse.json({
-      incidents: finalIncidents,
+      incidents: deduplicated,
       lastPos: data.lastPos,
       serverTime: data.serverTime,
     });

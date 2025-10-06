@@ -285,11 +285,10 @@ export function useFireIncidents() {
       }
     }
 
-    // TEMPORARILY DISABLED FOR DEBUGGING - only fetch on initial load
-    // const standardInterval = setInterval(fetchData, 60 * 1000);
-    // return () => {
-    //   clearInterval(standardInterval);
-    // };
+    const standardInterval = setInterval(fetchData, 60 * 1000);
+    return () => {
+      clearInterval(standardInterval);
+    };
   }, [fetchData]);
 
   const manualRefetch = useCallback(() => fetchData(true), [fetchData]);
