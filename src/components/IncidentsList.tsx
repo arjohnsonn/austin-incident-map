@@ -66,7 +66,6 @@ const VirtualizedList = memo(
       address: 192,
       units: 128,
       channels: 96,
-      status: 64,
     });
     const resizingColumn = useRef<string | null>(null);
     const startX = useRef<number>(0);
@@ -270,23 +269,6 @@ const VirtualizedList = memo(
                 onMouseDown={(e) => handleResizeStart(e, 'channels')}
               />
             </div>
-            <div style={{ width: columnWidths.status }} className="text-center flex-shrink-0">
-              <span
-                className={`inline-block px-2 py-1 text-xs font-bold rounded ${
-                  incident.traffic_report_status === "ACTIVE"
-                    ? incident.incidentType === "dispatch"
-                      ? "bg-blue-600 text-white"
-                      : (incident.incidentType || "fire") === "fire"
-                      ? "bg-red-600 text-white"
-                      : "bg-yellow-500 text-white"
-                    : "bg-neutral-500 text-white"
-                }`}
-              >
-                {incident.traffic_report_status === "ACTIVE"
-                  ? "ACTIVE"
-                  : "CLOSED"}
-              </span>
-            </div>
           </div>
         </div>
       );
@@ -309,7 +291,6 @@ const VirtualizedList = memo(
               <div style={{ width: columnWidths.address }} className="px-2 flex-shrink-0">ADDRESS</div>
               <div style={{ width: columnWidths.units }} className="px-2 flex-shrink-0">UNITS</div>
               <div style={{ width: columnWidths.channels }} className="px-2 flex-shrink-0">CHANNEL</div>
-              <div style={{ width: columnWidths.status }} className="text-center flex-shrink-0">STATUS</div>
             </div>
           </div>
 
