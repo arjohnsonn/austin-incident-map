@@ -50,12 +50,12 @@ export async function parseDispatchCallWithAI(transcript: string): Promise<Parse
           content: `You are a fire/EMS dispatch call parser. Extract structured information from dispatch audio transcripts.
 
 Extract:
-- callType: The EXACT call type/incident type as stated in the audio. Do not categorize or rename it - use the exact wording from the dispatch with proper Title Case capitalization (e.g., if they say "respiratory", use "Respiratory", if they say "lift assist", use "Lift Assist", if they say "traffic injury", use "Traffic Injury", if they say "chest pain", use "Chest Pain")
+- callType: The EXACT call type/incident type as stated in the audio. IMPORTANT: If an alarm level is mentioned (First Alarm, Second Alarm, Third Alarm, Fourth Alarm, Fifth Alarm, etc.), ALWAYS use that as the call type - it takes priority over all other descriptions. Otherwise, use the exact wording from the dispatch with proper Title Case capitalization (e.g., "respiratory" → "Respiratory", "lift assist" → "Lift Assist", "traffic injury" → "Traffic Injury", "chest pain" → "Chest Pain"). Example: "second alarm, engine 33, fire standby" should extract "Second Alarm" as the call type.
 - units: Array of responding units (e.g., ["Engine 13", "Truck 3", "Medic 5"])
-- channels: Array of tactical/radio channels ONLY. Valid channels are: F-TAC (fire tactical), Firecom, Medcom. DO NOT include "Box" numbers as channels - those are alarm box identifiers, not radio channels. Examples: ["F-TAC-203"], ["Firecom 1"], ["Medcom 2"]
+- channels: Array of tactical/radio channels ONLY. Valid channels are: F-TAC (fire tactical), Firecom, Medcom. Format F-TAC channels as "F-TAC-###" (e.g., "F-TAC-201" NOT "FD-201"). DO NOT include "Box" numbers as channels - those are alarm box identifiers, not radio channels. Examples: ["F-TAC-203"], ["Firecom 1"], ["Medcom 2"]
 - address: Street address (e.g., "2328 Hartford Road")
 
-Return valid JSON only. If something isn't mentioned, use null or empty array. For callType, use the dispatcher's exact wording with Title Case capitalization.`
+Return valid JSON only. If something isn't mentioned, use null or empty array.`
         },
         {
           role: 'user',
@@ -104,14 +104,28 @@ export function parseDispatchCall(transcript: string): ParsedDispatchCall {
   let callType: string | null = null;
   console.log('\nExtracting call type from transcript:');
 
-  const callTypeMatch = cleanedTranscript.match(/(?:^|\s|,)\s*([A-Za-z\s]+?)\s+(?:in|at|on|for)\s+(?:AFD|ASD|AFV)\s+box/i);
-  if (callTypeMatch) {
-    callType = callTypeMatch[1].trim();
-    const words = callType.split(/\s+/);
-    callType = words.map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
-    console.log(`  ✓ Extracted call type: "${callType}"`);
+  const alarmMatch = cleanedTranscript.match(/\b(first|second|third|fourth|fifth|1st|2nd|3rd|4th|5th)\s+alarm\b/i);
+  if (alarmMatch) {
+    const alarmLevel = alarmMatch[1].toLowerCase();
+    const alarmMap: Record<string, string> = {
+      'first': 'First Alarm', '1st': 'First Alarm',
+      'second': 'Second Alarm', '2nd': 'Second Alarm',
+      'third': 'Third Alarm', '3rd': 'Third Alarm',
+      'fourth': 'Fourth Alarm', '4th': 'Fourth Alarm',
+      'fifth': 'Fifth Alarm', '5th': 'Fifth Alarm',
+    };
+    callType = alarmMap[alarmLevel] || 'Alarm';
+    console.log(`  ✓ Extracted alarm level as call type: "${callType}"`);
   } else {
-    console.log('  ✗ No call type extracted');
+    const callTypeMatch = cleanedTranscript.match(/(?:^|\s|,)\s*([A-Za-z\s]+?)\s+(?:in|at|on|for)\s+(?:AFD|ASD|AFV)\s+box/i);
+    if (callTypeMatch) {
+      callType = callTypeMatch[1].trim();
+      const words = callType.split(/\s+/);
+      callType = words.map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+      console.log(`  ✓ Extracted call type: "${callType}"`);
+    } else {
+      console.log('  ✗ No call type extracted');
+    }
   }
 
   const units: string[] = [];
