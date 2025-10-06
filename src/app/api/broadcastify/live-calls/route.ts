@@ -22,9 +22,10 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
 
 async function geocodeWithNominatim(query: string): Promise<[number, number] | null> {
   try {
+    const viewbox = '-98.2,30.0,-97.4,30.6';
     const response = await withTimeout(
       fetch(
-        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=us`,
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=us&viewbox=${viewbox}&bounded=1`,
         {
           headers: {
             'User-Agent': 'Austin-Fire-Map/1.0',
@@ -48,9 +49,10 @@ async function geocodeWithNominatim(query: string): Promise<[number, number] | n
 
 async function geocodeWithMapsCo(query: string, apiKey: string, keyName: string): Promise<[number, number] | null> {
   try {
+    const queryWithLocation = `${query}, Austin, Travis County, Texas`;
     const response = await withTimeout(
       fetch(
-        `https://geocode.maps.co/search?q=${encodeURIComponent(query)}&api_key=${apiKey}`
+        `https://geocode.maps.co/search?q=${encodeURIComponent(queryWithLocation)}&api_key=${apiKey}`
       ),
       5000
     );
@@ -67,6 +69,26 @@ async function geocodeWithMapsCo(query: string, apiKey: string, keyName: string)
   return null;
 }
 
+function isWithinAustinArea(coordinates: [number, number]): boolean {
+  const [lon, lat] = coordinates;
+
+  const bounds = {
+    north: 30.6,
+    south: 30.0,
+    west: -98.2,
+    east: -97.4
+  };
+
+  const isInBounds = lat >= bounds.south && lat <= bounds.north &&
+                     lon >= bounds.west && lon <= bounds.east;
+
+  if (!isInBounds) {
+    console.log(`⚠️ Coordinates [${lon}, ${lat}] are outside Austin/Travis County area`);
+  }
+
+  return isInBounds;
+}
+
 async function geocodeAddress(addressVariants: string[]): Promise<[number, number] | null> {
   console.log(`Trying ${addressVariants.length} address variants with fallback geocoding`);
 
@@ -77,26 +99,26 @@ async function geocodeAddress(addressVariants: string[]): Promise<[number, numbe
     console.log(`Trying: "${query}"`);
 
     const nominatimResult = await geocodeWithNominatim(query);
-    if (nominatimResult) {
+    if (nominatimResult && isWithinAustinArea(nominatimResult)) {
       return nominatimResult;
     }
 
     if (mapsCoKey1) {
       const mapsCoResult1 = await geocodeWithMapsCo(query, mapsCoKey1, 'Key 1');
-      if (mapsCoResult1) {
+      if (mapsCoResult1 && isWithinAustinArea(mapsCoResult1)) {
         return mapsCoResult1;
       }
     }
 
     if (mapsCoKey2) {
       const mapsCoResult2 = await geocodeWithMapsCo(query, mapsCoKey2, 'Key 2');
-      if (mapsCoResult2) {
+      if (mapsCoResult2 && isWithinAustinArea(mapsCoResult2)) {
         return mapsCoResult2;
       }
     }
   }
 
-  console.log(`❌ All geocoding attempts failed for all variants`);
+  console.log(`❌ All geocoding attempts failed for all variants (or results outside Austin area)`);
   return null;
 }
 

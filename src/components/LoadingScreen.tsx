@@ -5,7 +5,7 @@ import { Spinner } from "@/components/ui/spinner";
 
 export function LoadingScreen() {
   const [dots, setDots] = useState("");
-  const [estimatedTime, setEstimatedTime] = useState(90);
+  const [estimatedTime, setEstimatedTime] = useState(30);
 
   useEffect(() => {
     const dotsInterval = setInterval(() => {
@@ -45,7 +45,7 @@ export function LoadingScreen() {
             <div
               className="h-full bg-gradient-to-r from-blue-500 to-blue-600 dark:from-blue-400 dark:to-blue-500 animate-pulse"
               style={{
-                width: estimatedTime > 0 ? `${((90 - estimatedTime) / 90) * 100}%` : '100%',
+                width: estimatedTime > 0 ? `${((30 - estimatedTime) / 30) * 100}%` : '100%',
                 transition: 'width 1s linear'
               }}
             />
@@ -56,17 +56,6 @@ export function LoadingScreen() {
             <span className="font-mono">{estimatedTime}s</span>
           </div>
         </div>
-
-        <div className="text-xs text-center text-neutral-500 dark:text-neutral-400 space-y-1">
-          <p>✓ Fetching calls from Broadcastify</p>
-          <p>✓ Transcribing dispatch audio</p>
-          <p>✓ Parsing incident details</p>
-          <p>✓ Geocoding addresses</p>
-        </div>
-
-        <p className="text-xs text-neutral-400 dark:text-neutral-500 text-center">
-          First load takes 30-90 seconds. Subsequent loads will be instant.
-        </p>
       </div>
     </div>
   );
