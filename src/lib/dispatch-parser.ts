@@ -33,6 +33,7 @@ function preprocessTranscript(transcript: string): string {
   processed = processed.replace(/\bAFV\b/gi, 'AFD');
   processed = processed.replace(/\ball\s+in\b/gi, 'alarm');
   processed = processed.replace(/\bfall\s+in\b/gi, 'alarm');
+  processed = processed.replace(/\bQuinn\s+(\d+)\b/gi, 'Quint $1');
 
   return processed;
 }
@@ -51,7 +52,7 @@ export async function parseDispatchCallWithAI(transcript: string): Promise<Parse
 
 Extract:
 - callType: The EXACT call type/incident type as stated in the audio. IMPORTANT: If an alarm level is mentioned (First Alarm, Second Alarm, Third Alarm, Fourth Alarm, Fifth Alarm, etc.), ALWAYS use that as the call type - it takes priority over all other descriptions. Otherwise, use the exact wording from the dispatch with proper Title Case capitalization (e.g., "respiratory" → "Respiratory", "lift assist" → "Lift Assist", "traffic injury" → "Traffic Injury", "chest pain" → "Chest Pain"). Example: "second alarm, engine 33, fire standby" should extract "Second Alarm" as the call type.
-- units: Array of responding units (e.g., ["Engine 13", "Truck 3", "Medic 5"])
+- units: Array of responding units (e.g., ["Engine 13", "Truck 3", "Medic 5", "Quint 34"]). Common unit types: Engine, Truck, Ladder, Medic, Ambulance, Battalion, Squad, Rescue, Brush, Quint. Note: "Quinn" in audio is actually "Quint" (a fire apparatus type). IMPORTANT: DO NOT extract "ESD" (Emergency Services District) numbers as units - "ESD 14" is a geographic area, not a unit. DO NOT extract alarm box identifiers (e.g., "box BL1", "box 123") as units. Only extract actual apparatus/unit callouts. Unit numbers should NOT contain dashes - remove any dashes from unit numbers (e.g., "14-01" becomes "1401", "12-02" becomes "1202").
 - channels: Array of tactical/radio channels ONLY. Valid channels are: F-TAC (fire tactical), Firecom, Medcom. Format F-TAC channels as "F-TAC-###" (e.g., "F-TAC-201" NOT "FD-201"). DO NOT include "Box" numbers as channels - those are alarm box identifiers, not radio channels. Examples: ["F-TAC-203"], ["Firecom 1"], ["Medcom 2"]
 - address: Street address (e.g., "2328 Hartford Road")
 
@@ -69,9 +70,13 @@ Return valid JSON only. If something isn't mentioned, use null or empty array.`
 
     const result = JSON.parse(completion.choices[0].message.content || '{}');
 
+    const cleanedUnits = (result.units || []).map((unit: string) => {
+      return unit.replace(/(\w+)\s+(\d+)-(\d+)/g, '$1 $2$3');
+    });
+
     console.log('AI Parsed Result:', {
       callType: result.callType || null,
-      units: result.units || [],
+      units: cleanedUnits,
       channels: result.channels || [],
       address: result.address || null,
     });
@@ -80,7 +85,7 @@ Return valid JSON only. If something isn't mentioned, use null or empty array.`
 
     return {
       callType: result.callType || null,
-      units: result.units || [],
+      units: cleanedUnits,
       channels: result.channels || [],
       address: result.address || null,
       rawTranscript: transcript,
