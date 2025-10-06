@@ -31,6 +31,7 @@ export interface ParsedDispatchCall {
   units: string[];
   channels: string[];
   address: string | null;
+  addressVariants: string[];
   estimatedResolutionMinutes: number;
   rawTranscript: string;
   incidentType: 'fire' | 'medical';

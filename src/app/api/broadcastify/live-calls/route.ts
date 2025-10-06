@@ -20,53 +20,9 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   ]);
 }
 
-function preprocessAddress(address: string): string[] {
-  let cleaned = address;
-
-  console.log(`Preprocessing address: "${address}"`);
-
-  cleaned = cleaned.replace(/\b(Southbound|Northbound|Eastbound|Westbound)\b/gi, '');
-
-  cleaned = cleaned.replace(/\bSouth Interstate Highway 35\b/gi, 'I-35 South');
-  cleaned = cleaned.replace(/\bNorth Interstate Highway 35\b/gi, 'I-35 North');
-  cleaned = cleaned.replace(/\bInterstate Highway 35\b/gi, 'I-35');
-
-  const rangeMatch = cleaned.match(/(\d+)-\d+\s+(.+)/);
-  if (rangeMatch) {
-    cleaned = `${rangeMatch[1]} ${rangeMatch[2]}`;
-    console.log(`  → Converted range to: "${cleaned}"`);
-  }
-
-  cleaned = cleaned.replace(/\s+to\s+.+?(Ramp|ramp)$/i, '');
-
-  cleaned = cleaned.replace(/\s+/g, ' ').trim();
-
-  console.log(`  → Final cleaned: "${cleaned}"`);
-
-  const variations = [cleaned];
-
-  if (cleaned.match(/\bI-35\b/i)) {
-    const simplified = cleaned.replace(/\bI-35\s+(North|South)\b/gi, 'I-35');
-    if (simplified !== cleaned) {
-      variations.push(simplified);
-    }
-  }
-
-  return variations;
-}
-
-async function geocodeAddress(address: string): Promise<[number, number] | null> {
-  const addressVariations = preprocessAddress(address);
-
-  const allQueries = addressVariations.flatMap(cleanedAddress => [
-    `${cleanedAddress}, Austin, TX`,
-    `${cleanedAddress}, Travis County, TX`,
-  ]);
-
-  console.log(`Trying ${allQueries.length} geocode queries in parallel for: ${address}`);
-
-  const geocodeAttempts = allQueries.map(query =>
-    withTimeout(
+async function geocodeWithNominatim(query: string): Promise<[number, number] | null> {
+  try {
+    const response = await withTimeout(
       fetch(
         `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=us`,
         {
@@ -74,31 +30,73 @@ async function geocodeAddress(address: string): Promise<[number, number] | null>
             'User-Agent': 'Austin-Fire-Map/1.0',
           },
         }
-      )
-        .then(response => response.json())
-        .then(data => {
-          if (data && data.length > 0) {
-            const result = data[0];
-            console.log(`✓ Geocoding successful: [${result.lon}, ${result.lat}] - ${result.display_name}`);
-            return [parseFloat(result.lon), parseFloat(result.lat)] as [number, number];
-          }
-          return null;
-        }),
+      ),
       5000
-    ).catch(error => {
-      console.log(`Geocode attempt failed for "${query}":`, error.message);
-      return null;
-    })
-  );
+    );
 
-  const results = await Promise.all(geocodeAttempts);
-  const firstSuccess = results.find(result => result !== null);
+    const data = await response.json();
+    if (data && data.length > 0) {
+      const result = data[0];
+      console.log(`✓ Nominatim geocoding successful: [${result.lon}, ${result.lat}]`);
+      return [parseFloat(result.lon), parseFloat(result.lat)] as [number, number];
+    }
+  } catch (error) {
+    console.log(`Nominatim failed for "${query}":`, error instanceof Error ? error.message : 'Unknown error');
+  }
+  return null;
+}
 
-  if (firstSuccess) {
-    return firstSuccess;
+async function geocodeWithMapsCo(query: string, apiKey: string, keyName: string): Promise<[number, number] | null> {
+  try {
+    const response = await withTimeout(
+      fetch(
+        `https://geocode.maps.co/search?q=${encodeURIComponent(query)}&api_key=${apiKey}`
+      ),
+      5000
+    );
+
+    const data = await response.json();
+    if (data && data.length > 0) {
+      const result = data[0];
+      console.log(`✓ Maps.co (${keyName}) geocoding successful: [${result.lon}, ${result.lat}]`);
+      return [parseFloat(result.lon), parseFloat(result.lat)] as [number, number];
+    }
+  } catch (error) {
+    console.log(`Maps.co (${keyName}) failed for "${query}":`, error instanceof Error ? error.message : 'Unknown error');
+  }
+  return null;
+}
+
+async function geocodeAddress(addressVariants: string[]): Promise<[number, number] | null> {
+  console.log(`Trying ${addressVariants.length} address variants with fallback geocoding`);
+
+  const mapsCoKey1 = process.env.GEOCODING_API_KEY;
+  const mapsCoKey2 = process.env.GEOCODING_API_KEY_2;
+
+  for (const query of addressVariants) {
+    console.log(`Trying: "${query}"`);
+
+    const nominatimResult = await geocodeWithNominatim(query);
+    if (nominatimResult) {
+      return nominatimResult;
+    }
+
+    if (mapsCoKey1) {
+      const mapsCoResult1 = await geocodeWithMapsCo(query, mapsCoKey1, 'Key 1');
+      if (mapsCoResult1) {
+        return mapsCoResult1;
+      }
+    }
+
+    if (mapsCoKey2) {
+      const mapsCoResult2 = await geocodeWithMapsCo(query, mapsCoKey2, 'Key 2');
+      if (mapsCoResult2) {
+        return mapsCoResult2;
+      }
+    }
   }
 
-  console.log(`❌ All geocoding attempts failed for: ${address}`);
+  console.log(`❌ All geocoding attempts failed for all variants`);
   return null;
 }
 
@@ -197,8 +195,8 @@ export async function GET(request: NextRequest) {
 
         const finalCallType = parsed.callType || '?';
 
-        console.log('Geocoding address:', parsed.address);
-        const coordinates = await geocodeAddress(parsed.address);
+        console.log('Geocoding address with variants:', parsed.addressVariants);
+        const coordinates = await geocodeAddress(parsed.addressVariants);
         console.log('Coordinates:', coordinates);
 
         const incident: DispatchIncident = {
