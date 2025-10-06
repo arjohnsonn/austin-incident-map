@@ -2,7 +2,7 @@
 
 import { useState, useMemo, memo, useRef, useEffect, useCallback } from "react";
 import { format } from "date-fns";
-import { Search, Calendar, RefreshCw } from "lucide-react";
+import { Search, Calendar, RefreshCw, Play, Pause, Clock } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,6 +33,7 @@ interface IncidentsListProps {
   loading?: boolean;
   lastUpdated?: Date | null;
   onRefresh?: () => void;
+  onSetPosition?: (pos: number) => void;
 }
 
 const ITEM_HEIGHT = 32;
@@ -50,6 +51,8 @@ const VirtualizedList = memo(
   }) => {
     const [scrollTop, setScrollTop] = useState(0);
     const [containerHeight, setContainerHeight] = useState(600);
+    const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
+    const audioRef = useRef<HTMLAudioElement | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -78,6 +81,37 @@ const VirtualizedList = memo(
         return "Invalid date";
       }
     };
+
+    const handlePlayAudio = useCallback((e: React.MouseEvent, incident: FireIncident) => {
+      e.stopPropagation();
+
+      if (!incident.audioUrl) return;
+
+      if (playingAudioId === incident.traffic_report_id) {
+        audioRef.current?.pause();
+        setPlayingAudioId(null);
+      } else {
+        if (audioRef.current) {
+          audioRef.current.pause();
+        }
+
+        audioRef.current = new Audio(incident.audioUrl);
+        audioRef.current.play();
+        setPlayingAudioId(incident.traffic_report_id);
+
+        audioRef.current.onended = () => {
+          setPlayingAudioId(null);
+        };
+      }
+    }, [playingAudioId]);
+
+    useEffect(() => {
+      return () => {
+        if (audioRef.current) {
+          audioRef.current.pause();
+        }
+      };
+    }, []);
 
 
     const startIndex = Math.max(
@@ -116,6 +150,23 @@ const VirtualizedList = memo(
           onClick={() => onIncidentSelect(incident)}
         >
           <div className="flex items-center h-full px-2 text-xs">
+            <div className="w-8 flex items-center justify-center">
+              {incident.audioUrl ? (
+                <button
+                  onClick={(e) => handlePlayAudio(e, incident)}
+                  className="p-1 hover:bg-neutral-200 dark:hover:bg-neutral-700 rounded-full transition-colors"
+                  title="Play dispatch audio"
+                >
+                  {playingAudioId === incident.traffic_report_id ? (
+                    <Pause className="w-3 h-3 text-blue-600 dark:text-blue-400" />
+                  ) : (
+                    <Play className="w-3 h-3 text-neutral-600 dark:text-neutral-400" />
+                  )}
+                </button>
+              ) : (
+                <div className="w-3 h-3" />
+              )}
+            </div>
             <div className="w-20 text-center text-neutral-500 dark:text-neutral-400 font-mono">
               {formatDate(incident.published_date)}
             </div>
@@ -125,14 +176,23 @@ const VirtualizedList = memo(
             <div className="w-48 px-2 truncate text-neutral-600 dark:text-neutral-400">
               {incident.address}
             </div>
-            <div className="w-24 px-2 truncate text-neutral-600 dark:text-neutral-400 text-center">
-              {incident.agency?.trim() || "Unknown"}
+            <div className="w-32 px-2 truncate text-blue-600 dark:text-blue-400 text-xs">
+              {incident.units && incident.units.length > 0
+                ? incident.units.join(', ')
+                : '-'}
+            </div>
+            <div className="w-24 px-2 truncate text-purple-600 dark:text-purple-400 text-xs">
+              {incident.channels && incident.channels.length > 0
+                ? incident.channels.join(', ')
+                : '-'}
             </div>
             <div className="w-16 text-center">
               <span
                 className={`inline-block px-2 py-1 text-xs font-bold rounded ${
                   incident.traffic_report_status === "ACTIVE"
-                    ? (incident.incidentType || "fire") === "fire"
+                    ? incident.incidentType === "dispatch"
+                      ? "bg-blue-600 text-white"
+                      : (incident.incidentType || "fire") === "fire"
                       ? "bg-red-600 text-white"
                       : "bg-yellow-500 text-white"
                     : "bg-neutral-500 text-white"
@@ -159,10 +219,12 @@ const VirtualizedList = memo(
           {/* Table Header - now inside scrollable area */}
           <div className="bg-neutral-900 dark:bg-black text-white text-xs font-bold px-2 py-2 border-b-2 border-neutral-600 sticky top-0 z-10 min-w-[800px]">
             <div className="flex items-center">
+              <div className="w-8 text-center">🔊</div>
               <div className="w-20 text-center">TIME</div>
-              <div className="w-42 px-2">CALL TITLE</div>
+              <div className="w-42 px-2">CALL TYPE</div>
               <div className="w-48 px-2">ADDRESS</div>
-              <div className="w-24 px-2 text-center">AGENCY</div>
+              <div className="w-32 px-2">UNITS</div>
+              <div className="w-24 px-2">CHANNEL</div>
               <div className="w-16 text-center">STATUS</div>
             </div>
           </div>
@@ -184,6 +246,7 @@ export function IncidentsList({
   loading,
   lastUpdated,
   onRefresh,
+  onSetPosition,
 }: IncidentsListProps) {
   const [filters, setFilters] = useState<FilterState>({
     search: "",
@@ -320,6 +383,16 @@ export function IncidentsList({
     });
   };
 
+  const fetchLast12Hours = useCallback(() => {
+    if (!onSetPosition) return;
+    const now = Date.now();
+    const twelveHoursAgo = Math.floor((now - (12 * 60 * 60 * 1000)) / 1000);
+    onSetPosition(twelveHoursAgo);
+    if (onRefresh) {
+      onRefresh();
+    }
+  }, [onSetPosition, onRefresh]);
+
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -364,6 +437,16 @@ export function IncidentsList({
             )}
           </div>
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={fetchLast12Hours}
+              disabled={loading}
+              className="gap-2"
+            >
+              <Clock className="h-3 w-3" />
+              Last 12 Hours
+            </Button>
             <Button
               variant="outline"
               size="sm"

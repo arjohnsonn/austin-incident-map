@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { FireIncident } from '@/types/incident';
+import { DispatchIncident } from '@/types/broadcastify';
 
 interface RawIncidentData {
   traffic_report_id: string;
@@ -17,8 +18,59 @@ interface RawIncidentData {
   agency: string;
 }
 
+interface BroadcastifyResponse {
+  incidents: DispatchIncident[];
+  lastPos: number;
+  serverTime: number;
+}
+
 const FIRE_API_ENDPOINT = 'https://data.austintexas.gov/resource/wpu4-x69d.json?$order=published_date DESC&$limit=1000';
 const TRAFFIC_API_ENDPOINT = 'https://data.austintexas.gov/resource/dx9v-zd7x.json?$order=published_date DESC&$limit=1000';
+
+async function fetchBroadcastifyLiveCalls(lastPos?: number): Promise<{ incidents: FireIncident[]; lastPos: number }> {
+  try {
+    const url = lastPos
+      ? `/api/broadcastify/live-calls?pos=${lastPos}`
+      : '/api/broadcastify/live-calls';
+
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch Broadcastify calls: ${response.statusText}`);
+    }
+
+    const data: BroadcastifyResponse = await response.json();
+
+    const dispatchIncidents: FireIncident[] = data.incidents.map(incident => {
+      const timestamp = typeof incident.timestamp === 'string'
+        ? new Date(incident.timestamp)
+        : incident.timestamp;
+
+      return {
+        traffic_report_id: incident.id,
+        published_date: timestamp.toISOString(),
+        issue_reported: incident.callType,
+        location: incident.location,
+        latitude: incident.location.coordinates[1].toString(),
+        longitude: incident.location.coordinates[0].toString(),
+        address: incident.address,
+        traffic_report_status: 'ACTIVE' as const,
+        traffic_report_status_date_time: timestamp.toISOString(),
+        agency: 'Austin Fire Department',
+        incidentType: 'dispatch' as const,
+        units: incident.units,
+        channels: incident.channels,
+        audioUrl: incident.audioUrl,
+        rawTranscript: incident.rawTranscript,
+      };
+    });
+
+    return { incidents: dispatchIncidents, lastPos: data.lastPos };
+  } catch (error) {
+    console.error('Error fetching Broadcastify calls:', error);
+    return { incidents: [], lastPos: lastPos || 0 };
+  }
+}
 
 export async function fetchFireIncidents(): Promise<FireIncident[]> {
   try {
@@ -76,11 +128,17 @@ export async function fetchFireIncidents(): Promise<FireIncident[]> {
   }
 }
 
+const CACHE_KEY_INCIDENTS = 'dispatch_incidents_cache';
+const CACHE_KEY_LASTPOS = 'dispatch_lastpos_cache';
+
 export function useFireIncidents() {
   const [incidents, setIncidents] = useState<FireIncident[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [isManualRefresh, setIsManualRefresh] = useState(false);
+  const lastPosRef = useRef<number>(0);
+  const dispatchIncidentsRef = useRef<FireIncident[]>([]);
+  const isInitializedRef = useRef(false);
 
   const fetchData = useCallback(async (manual = false) => {
     try {
@@ -88,43 +146,52 @@ export function useFireIncidents() {
       if (manual) {
         setIsManualRefresh(true);
       }
-      const newData = await fetchFireIncidents();
 
-      setIncidents(prevIncidents => {
-        if (prevIncidents.length === 0) {
-          return newData;
-        }
+      console.log('Fetching Broadcastify calls with lastPos:', lastPosRef.current);
+      const broadcastifyData = await fetchBroadcastifyLiveCalls(lastPosRef.current);
+      console.log('Broadcastify data received:', {
+        lastPos: broadcastifyData.lastPos,
+        incidentsCount: broadcastifyData.incidents.length,
+      });
 
-        const existingMap = new Map(
-          prevIncidents.map(incident => [incident.traffic_report_id, incident])
+      lastPosRef.current = broadcastifyData.lastPos;
+
+      if (broadcastifyData.incidents.length > 0) {
+        console.log('Adding new dispatch incidents:', broadcastifyData.incidents.length);
+
+        const existingIds = new Set(
+          dispatchIncidentsRef.current.map(inc => inc.traffic_report_id)
         );
 
-        let hasChanges = false;
-        const updatedIncidents = newData.map(newIncident => {
-          const existing = existingMap.get(newIncident.traffic_report_id);
+        const newIncidents = broadcastifyData.incidents.filter(
+          inc => !existingIds.has(inc.traffic_report_id)
+        );
 
-          if (!existing) {
-            hasChanges = true;
-            return newIncident;
-          }
+        console.log('New unique incidents:', newIncidents.length);
 
-          if (
-            existing.traffic_report_status !== newIncident.traffic_report_status ||
-            existing.traffic_report_status_date_time !== newIncident.traffic_report_status_date_time ||
-            existing.published_date !== newIncident.published_date
-          ) {
-            hasChanges = true;
-            return newIncident;
-          }
+        dispatchIncidentsRef.current = [
+          ...newIncidents,
+          ...dispatchIncidentsRef.current.slice(0, 50),
+        ];
+      }
 
-          return existing;
-        });
+      console.log('Total dispatch incidents in memory:', dispatchIncidentsRef.current.length);
 
-        if (newData.length !== prevIncidents.length) {
-          hasChanges = true;
-        }
+      localStorage.setItem(CACHE_KEY_INCIDENTS, JSON.stringify(dispatchIncidentsRef.current));
+      localStorage.setItem(CACHE_KEY_LASTPOS, lastPosRef.current.toString());
 
-        return hasChanges ? updatedIncidents : prevIncidents;
+      // TEMPORARILY DISABLED - only showing Broadcastify dispatch calls
+      // const standardIncidents = await fetchFireIncidents();
+      // const newData = [...standardIncidents, ...dispatchIncidentsRef.current];
+
+      setIncidents(prevIncidents => {
+        const allIncidents = [...dispatchIncidentsRef.current, ...prevIncidents];
+
+        const deduped = Array.from(
+          new Map(allIncidents.map(inc => [inc.traffic_report_id, inc])).values()
+        );
+
+        return deduped;
       });
 
       setLastUpdated(new Date());
@@ -138,14 +205,48 @@ export function useFireIncidents() {
   }, []);
 
   useEffect(() => {
+    if (!isInitializedRef.current) {
+      isInitializedRef.current = true;
+
+      try {
+        const cachedIncidents = localStorage.getItem(CACHE_KEY_INCIDENTS);
+        const cachedLastPos = localStorage.getItem(CACHE_KEY_LASTPOS);
+
+        if (cachedIncidents) {
+          const parsed = JSON.parse(cachedIncidents) as FireIncident[];
+          console.log('Loaded from cache:', parsed.length, 'incidents');
+          dispatchIncidentsRef.current = parsed;
+          setIncidents(parsed);
+
+          if (cachedLastPos) {
+            lastPosRef.current = parseInt(cachedLastPos, 10);
+            console.log('Loaded lastPos from cache:', lastPosRef.current);
+          }
+        } else {
+          console.log('No cache found, will fetch all recent calls');
+          lastPosRef.current = 0;
+        }
+      } catch (error) {
+        console.error('Failed to load cache:', error);
+      }
+    }
+
     fetchData();
 
-    const interval = setInterval(fetchData, 1 * 60 * 1000);
+    const standardInterval = setInterval(fetchData, 1 * 60 * 1000);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(standardInterval);
+    };
   }, [fetchData]);
 
   const manualRefetch = useCallback(() => fetchData(true), [fetchData]);
 
-  return { incidents, error, lastUpdated, isManualRefresh, refetch: manualRefetch };
+  const setPosition = useCallback((pos: number) => {
+    lastPosRef.current = pos;
+    localStorage.setItem(CACHE_KEY_LASTPOS, pos.toString());
+    console.log('Position set to:', pos, new Date(pos * 1000).toISOString());
+  }, []);
+
+  return { incidents, error, lastUpdated, isManualRefresh, refetch: manualRefetch, setPosition };
 }

@@ -10,7 +10,7 @@ import { FireIncident } from '@/types/incident';
 import { toast } from 'sonner';
 
 export default function Home() {
-  const { incidents, error, lastUpdated, isManualRefresh, refetch } = useFireIncidents();
+  const { incidents, error, lastUpdated, isManualRefresh, refetch, setPosition } = useFireIncidents();
   const [selectedIncident, setSelectedIncident] = useState<FireIncident | null>(null);
   const [displayedIncidents, setDisplayedIncidents] = useState<FireIncident[]>([]);
 
@@ -63,6 +63,7 @@ export default function Home() {
             onDisplayedIncidentsChange={handleDisplayedIncidentsChange}
             lastUpdated={lastUpdated}
             onRefresh={refetch}
+            onSetPosition={setPosition}
           />
         </ResizablePanel>
 
