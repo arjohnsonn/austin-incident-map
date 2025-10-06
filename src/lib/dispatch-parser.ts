@@ -52,7 +52,7 @@ export async function parseDispatchCallWithAI(transcript: string): Promise<Parse
 Extract:
 - callType: The EXACT call type/incident type as stated in the audio. Do not categorize or rename it - use the exact wording from the dispatch with proper Title Case capitalization (e.g., if they say "respiratory", use "Respiratory", if they say "lift assist", use "Lift Assist", if they say "traffic injury", use "Traffic Injury", if they say "chest pain", use "Chest Pain")
 - units: Array of responding units (e.g., ["Engine 13", "Truck 3", "Medic 5"])
-- channels: Array of tactical channels (e.g., ["F-TAC-203"])
+- channels: Array of tactical/radio channels ONLY. Valid channels are: F-TAC (fire tactical), Firecom, Medcom. DO NOT include "Box" numbers as channels - those are alarm box identifiers, not radio channels. Examples: ["F-TAC-203"], ["Firecom 1"], ["Medcom 2"]
 - address: Street address (e.g., "2328 Hartford Road")
 
 Return valid JSON only. If something isn't mentioned, use null or empty array. For callType, use the dispatcher's exact wording with Title Case capitalization.`
