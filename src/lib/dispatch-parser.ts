@@ -52,12 +52,13 @@ export async function parseDispatchCallWithAI(transcript: string): Promise<Parse
 
 Extract:
 - callType: The EXACT call type/incident type as stated in the audio. IMPORTANT: If an alarm level is mentioned (First Alarm, Second Alarm, Third Alarm, Fourth Alarm, Fifth Alarm, etc.), ALWAYS use that as the call type - it takes priority over all other descriptions. Otherwise, use the exact wording from the dispatch with proper Title Case capitalization (e.g., "respiratory" → "Respiratory", "lift assist" → "Lift Assist", "traffic injury" → "Traffic Injury", "chest pain" → "Chest Pain"). Example: "second alarm, engine 33, fire standby" should extract "Second Alarm" as the call type.
+- incidentType: Classify the incident as either "fire" or "medical". Fire incidents include: fires, alarms, smoke, vehicle fires, structure fires, brush fires, hazmat, gas leaks, explosions, rescues (not medical), technical rescues. Medical incidents include: medical emergencies, chest pain, respiratory issues, unconscious persons, injuries, falls, lift assists, cardiac arrest, strokes, seizures, overdoses, diabetic emergencies, any EMS/medical response.
 - units: Array of ALL responding units mentioned ANYWHERE in the transcript. CRITICAL: You must scan the ENTIRE transcript from start to end and extract EVERY unit mentioned. Units can appear at the beginning ("Engine 33, chest pain"), in the middle, or in a list at the end ("Response: Engine 3, Truck 3, Engine 14"). Example: "Second alarm, engine 33, fire standby... Response on FD-201, Engine 3, Truck 3, Engine 14" should extract ["Engine 33", "Engine 3", "Truck 3", "Engine 14"]. Common unit types: Engine, Truck, Ladder, Medic, Ambulance, Battalion, Squad, Rescue, Brush, Quint, FTO, Safety Officer, Command, Investigator, Wildfire Support. Note: "Quinn" in audio is actually "Quint" (a fire apparatus type). DO NOT extract "ESD" (Emergency Services District) numbers as units - "ESD 14" is a geographic area, not a unit. DO NOT extract alarm box identifiers (e.g., "box BL1", "box 123") as units. Only extract actual apparatus/unit callouts. Unit numbers should NOT contain dashes - remove any dashes from unit numbers (e.g., "14-01" becomes "1401", "12-02" becomes "1202").
 - channels: Array of tactical/radio channels ONLY. Valid channels are: F-TAC (fire tactical), Firecom, Medcom. Format F-TAC channels as "F-TAC-###" (e.g., "F-TAC-201" NOT "FD-201" or "FD201"). DO NOT include "Box" numbers as channels - those are alarm box identifiers, not radio channels. Examples: ["F-TAC-203"], ["Firecom 1"], ["Medcom 2"]
 - address: Street address (e.g., "2328 Hartford Road")
 - estimatedResolutionMinutes: Estimated time in minutes until this incident is likely resolved. Guidelines: Medical calls (chest pain, respiratory, unconscious) ~30min, Traffic accidents ~45min, Fire alarm activation ~15min, Lift assist ~20min, First Alarm ~60min, Second Alarm ~120min, Third Alarm+ ~180min, Vehicle fire ~30min, Structure fire without alarm level ~45min, Hazmat ~90min, Rescue ~60min. Consider severity and number of responding units. You do not have to follow these, these are just examples.
 
-Return valid JSON only. If something isn't mentioned, use null or empty array. estimatedResolutionMinutes must be a number.`
+Return valid JSON only. If something isn't mentioned, use null or empty array. estimatedResolutionMinutes and incidentType must always be provided.`
         },
         {
           role: 'user',
@@ -75,8 +76,11 @@ Return valid JSON only. If something isn't mentioned, use null or empty array. e
       return unit.replace(/(\w+)\s+(\d+)-(\d+)/g, '$1 $2$3');
     });
 
+    const incidentType = result.incidentType === 'medical' ? 'medical' : 'fire';
+
     console.log('AI Parsed Result:', {
       callType: result.callType || null,
+      incidentType: incidentType,
       units: cleanedUnits,
       channels: result.channels || [],
       address: result.address || null,
@@ -87,6 +91,7 @@ Return valid JSON only. If something isn't mentioned, use null or empty array. e
 
     return {
       callType: result.callType || null,
+      incidentType: incidentType,
       units: cleanedUnits,
       channels: result.channels || [],
       address: result.address || null,
@@ -207,6 +212,7 @@ export function parseDispatchCall(transcript: string): ParsedDispatchCall {
 
   return {
     callType,
+    incidentType: 'fire',
     units,
     channels,
     address,

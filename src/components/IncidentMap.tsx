@@ -62,6 +62,10 @@ export function IncidentMap({
         background-color: #dc2626;
       }
 
+      .medical-radar {
+        background-color: #959F1E;
+      }
+
       .traffic-radar {
         background-color: #eab308;
       }
@@ -316,21 +320,40 @@ export function IncidentMap({
       const activeFireCount = activeIncidents.filter(
         (inc) => (inc.incidentType || "fire") === "fire"
       ).length;
+      const activeMedicalCount = activeIncidents.filter(
+        (inc) => (inc.incidentType || "fire") === "medical"
+      ).length;
       const activeTrafficCount = activeIncidents.filter(
         (inc) => (inc.incidentType || "fire") === "traffic"
       ).length;
 
-      let predominantType = "fire"; // default
+      let predominantType = "fire";
       if (activeIncidents.length > 0) {
-        predominantType = activeFireCount >= activeTrafficCount ? "fire" : "traffic";
+        if (activeFireCount >= activeMedicalCount && activeFireCount >= activeTrafficCount) {
+          predominantType = "fire";
+        } else if (activeMedicalCount >= activeFireCount && activeMedicalCount >= activeTrafficCount) {
+          predominantType = "medical";
+        } else {
+          predominantType = "traffic";
+        }
       } else {
         const fireCount = group.filter(
           (inc) => (inc.incidentType || "fire") === "fire"
         ).length;
+        const medicalCount = group.filter(
+          (inc) => (inc.incidentType || "fire") === "medical"
+        ).length;
         const trafficCount = group.filter(
           (inc) => (inc.incidentType || "fire") === "traffic"
         ).length;
-        predominantType = fireCount >= trafficCount ? "fire" : "traffic";
+
+        if (fireCount >= medicalCount && fireCount >= trafficCount) {
+          predominantType = "fire";
+        } else if (medicalCount >= fireCount && medicalCount >= trafficCount) {
+          predominantType = "medical";
+        } else {
+          predominantType = "traffic";
+        }
       }
 
       const markerEl = document.createElement("div");
@@ -341,6 +364,11 @@ export function IncidentMap({
             ? {
                 bg: "bg-red-600",
                 border: "border-red-800",
+              }
+            : predominantType === "medical"
+            ? {
+                bg: "bg-[#959F1E]",
+                border: "border-[#7a8218]",
               }
             : {
                 bg: "bg-yellow-500",
@@ -356,7 +384,8 @@ export function IncidentMap({
 
         if (hasActiveIncidents) {
           const radarRing = document.createElement("div");
-          radarRing.className = `radar-ring ${predominantType === "fire" ? "fire-radar" : "traffic-radar"}`;
+          const radarClass = predominantType === "fire" ? "fire-radar" : predominantType === "medical" ? "medical-radar" : "traffic-radar";
+          radarRing.className = `radar-ring ${radarClass}`;
           markerEl.appendChild(radarRing);
         }
       } else {
@@ -368,12 +397,15 @@ export function IncidentMap({
           const colors =
             incidentType === "fire"
               ? "border-red-600 bg-red-600"
+              : incidentType === "medical"
+              ? "border-[#959F1E] bg-[#959F1E]"
               : "border-yellow-500 bg-yellow-500";
 
           markerEl.className = `w-4 h-4 rounded-full border-2 cursor-pointer ${colors} active-marker relative`;
 
           const radarRing = document.createElement("div");
-          radarRing.className = `radar-ring ${incidentType === "fire" ? "fire-radar" : "traffic-radar"}`;
+          const radarClass = incidentType === "fire" ? "fire-radar" : incidentType === "medical" ? "medical-radar" : "traffic-radar";
+          radarRing.className = `radar-ring ${radarClass}`;
           markerEl.appendChild(radarRing);
         } else {
           markerEl.className =

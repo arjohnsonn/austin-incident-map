@@ -1,27 +1,48 @@
-'use client';
+"use client";
 
-import { useState, useCallback, useEffect } from 'react';
-import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
-import { IncidentMap } from '@/components/IncidentMap';
-import { IncidentsList } from '@/components/IncidentsList';
-import { ThemeToggle } from '@/components/ThemeToggle';
-import { LoadingScreen } from '@/components/LoadingScreen';
-import { useFireIncidents } from '@/lib/api';
-import { FireIncident } from '@/types/incident';
-import { toast } from 'sonner';
+import { useState, useCallback, useEffect } from "react";
+import {
+  ResizablePanelGroup,
+  ResizablePanel,
+  ResizableHandle,
+} from "@/components/ui/resizable";
+import { IncidentMap } from "@/components/IncidentMap";
+import { IncidentsList } from "@/components/IncidentsList";
+import { ThemeToggle } from "@/components/ThemeToggle";
+import { LoadingScreen } from "@/components/LoadingScreen";
+import { useFireIncidents } from "@/lib/api";
+import { FireIncident } from "@/types/incident";
+import { toast } from "sonner";
 
 export default function Home() {
-  const { incidents, error, lastUpdated, isManualRefresh, isLoading, refetch, setPosition, fetchInitial } = useFireIncidents();
-  const [selectedIncident, setSelectedIncident] = useState<FireIncident | null>(null);
-  const [displayedIncidents, setDisplayedIncidents] = useState<FireIncident[]>([]);
+  const {
+    incidents,
+    error,
+    lastUpdated,
+    isManualRefresh,
+    isLoading,
+    refetch,
+    setPosition,
+    fetchInitial,
+    resetStorage,
+  } = useFireIncidents();
+  const [selectedIncident, setSelectedIncident] = useState<FireIncident | null>(
+    null
+  );
+  const [displayedIncidents, setDisplayedIncidents] = useState<FireIncident[]>(
+    []
+  );
 
-  const handleDisplayedIncidentsChange = useCallback((incidents: FireIncident[]) => {
-    setDisplayedIncidents(incidents);
-  }, []);
+  const handleDisplayedIncidentsChange = useCallback(
+    (incidents: FireIncident[]) => {
+      setDisplayedIncidents(incidents);
+    },
+    []
+  );
 
   useEffect(() => {
     if (isManualRefresh && lastUpdated) {
-      toast.success('Incidents refreshed successfully');
+      toast.success("Incidents refreshed successfully");
     }
   }, [isManualRefresh, lastUpdated]);
 
@@ -44,7 +65,7 @@ export default function Home() {
           <div>
             <h1 className="text-2xl font-bold">Austin Incident Map</h1>
             <p className="text-muted-foreground">
-              Real-time fire, rescue, hazmat, and traffic incidents in Austin and Travis County
+              Real-time Austin Fire Department incidents with unit tracking
             </p>
           </div>
           <ThemeToggle />
@@ -61,6 +82,7 @@ export default function Home() {
             lastUpdated={lastUpdated}
             onRefresh={refetch}
             onFetchInitial={fetchInitial}
+            onResetStorage={resetStorage}
           />
         </ResizablePanel>
 

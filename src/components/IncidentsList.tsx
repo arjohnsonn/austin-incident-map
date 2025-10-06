@@ -2,7 +2,7 @@
 
 import { useState, useMemo, memo, useRef, useEffect, useCallback } from "react";
 import { format } from "date-fns";
-import { Search, Calendar, RefreshCw, Play, Pause } from "lucide-react";
+import { Search, Calendar, RefreshCw, Play, Pause, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -39,6 +39,7 @@ interface IncidentsListProps {
   lastUpdated?: Date | null;
   onRefresh?: () => void;
   onFetchInitial?: () => void;
+  onResetStorage?: () => void;
 }
 
 const ITEM_HEIGHT = 32;
@@ -59,6 +60,9 @@ const VirtualizedList = memo(
     const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
+    const [newIncidentIds, setNewIncidentIds] = useState<Set<string>>(new Set());
+    const prevIncidentIdsRef = useRef<Set<string>>(new Set());
+    const isInitializedRef = useRef(false);
     const [columnWidths, setColumnWidths] = useState({
       play: 32,
       time: 80,
@@ -162,6 +166,37 @@ const VirtualizedList = memo(
       };
     }, []);
 
+    useEffect(() => {
+      const currentIds = new Set(incidents.map(inc => inc.traffic_report_id));
+
+      if (!isInitializedRef.current) {
+        isInitializedRef.current = true;
+        prevIncidentIdsRef.current = currentIds;
+        return;
+      }
+
+      const newIds = new Set<string>();
+
+      currentIds.forEach(id => {
+        if (!prevIncidentIdsRef.current.has(id)) {
+          newIds.add(id);
+        }
+      });
+
+      if (newIds.size > 0) {
+        setNewIncidentIds(newIds);
+
+        const timer = setTimeout(() => {
+          setNewIncidentIds(new Set());
+        }, 3000);
+
+        prevIncidentIdsRef.current = currentIds;
+        return () => clearTimeout(timer);
+      }
+
+      prevIncidentIdsRef.current = currentIds;
+    }, [incidents]);
+
 
     const startIndex = Math.max(
       0,
@@ -177,6 +212,7 @@ const VirtualizedList = memo(
       const incident = incidents[i];
       const isSelected =
         selectedIncident?.traffic_report_id === incident.traffic_report_id;
+      const isNew = newIncidentIds.has(incident.traffic_report_id);
 
       visibleItems.push(
         <div
@@ -187,7 +223,7 @@ const VirtualizedList = memo(
               : i % 2 === 0
               ? "bg-neutral-50 dark:bg-neutral-900"
               : "bg-white dark:bg-neutral-800"
-          }`}
+          } ${isNew ? 'animate-new-incident' : ''}`}
           style={
             {
               "--item-top": `${i * ITEM_HEIGHT}px`,
@@ -312,6 +348,7 @@ export function IncidentsList({
   lastUpdated,
   onRefresh,
   onFetchInitial,
+  onResetStorage,
 }: IncidentsListProps) {
   const [filters, setFilters] = useState<FilterState>({
     search: "",
@@ -525,6 +562,17 @@ export function IncidentsList({
                 className={`h-3 w-3 ${loading ? "animate-spin" : ""}`}
               />
               Refresh
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onResetStorage}
+              disabled={loading}
+              className="gap-2"
+              title="Clear cache and reload data"
+            >
+              <Trash2 className="h-3 w-3" />
+              Reset
             </Button>
             <span className="bg-neutral-200 dark:bg-neutral-700 px-2 py-1 rounded text-xs font-medium">
               {displayedIncidents.length} incidents

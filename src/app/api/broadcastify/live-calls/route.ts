@@ -217,6 +217,7 @@ export async function GET(request: NextRequest) {
           groupId: call.groupId,
           duration: call.duration,
           estimatedResolutionMinutes: parsed.estimatedResolutionMinutes,
+          incidentType: parsed.incidentType,
         };
 
         if (coordinates) {
@@ -282,30 +283,71 @@ export async function GET(request: NextRequest) {
     console.log(`Unit reassignment: ${processedIncidents.length} → ${finalIncidents.length} incidents`);
 
     console.log('\nRemoving duplicate address+callType combinations...');
-    const seenAddressCallType = new Map<string, DispatchIncident>();
+
+    const normalizeCallType = (callType: string) => {
+      return callType.toLowerCase().replace(/[^a-z0-9]/g, '');
+    };
+
+    const seenByCallType = new Map<string, DispatchIncident[]>();
     const deduplicated: DispatchIncident[] = [];
 
     for (const incident of finalIncidents) {
-      const key = `${incident.address.trim().toLowerCase()}|||${incident.callType.toLowerCase()}`;
-      const existing = seenAddressCallType.get(key);
+      const normalizedCallType = normalizeCallType(incident.callType);
 
-      if (existing) {
-        const existingTime = new Date(existing.timestamp).getTime();
-        const currentTime = new Date(incident.timestamp).getTime();
+      if (!seenByCallType.has(normalizedCallType)) {
+        seenByCallType.set(normalizedCallType, []);
+      }
+      seenByCallType.get(normalizedCallType)!.push(incident);
+    }
 
-        if (currentTime > existingTime) {
-          console.log(`  → Replacing older duplicate: ${existing.id} with newer ${incident.id} at ${incident.address}`);
-          const index = deduplicated.indexOf(existing);
-          if (index !== -1) {
-            deduplicated[index] = incident;
-          }
-          seenAddressCallType.set(key, incident);
-        } else {
-          console.log(`  → Skipping older duplicate: ${incident.id} at ${incident.address}`);
+    for (const [callType, incidents] of seenByCallType.entries()) {
+      const incidentsWithAddress = incidents.filter(inc => inc.address && inc.address !== '?');
+      const incidentsWithoutAddress = incidents.filter(inc => !inc.address || inc.address === '?');
+
+      const grouped = new Map<string, DispatchIncident[]>();
+
+      for (const incident of incidentsWithAddress) {
+        const normalizedAddress = incident.address.trim().toLowerCase();
+        if (!grouped.has(normalizedAddress)) {
+          grouped.set(normalizedAddress, []);
         }
-      } else {
-        deduplicated.push(incident);
-        seenAddressCallType.set(key, incident);
+        grouped.get(normalizedAddress)!.push(incident);
+      }
+
+      for (const [address, addressIncidents] of grouped.entries()) {
+        const sorted = addressIncidents.sort((a, b) =>
+          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+        );
+        const newest = sorted[0];
+        deduplicated.push(newest);
+
+        if (sorted.length > 1) {
+          console.log(`  → Keeping newest of ${sorted.length} incidents at ${address}: ${newest.id}`);
+        }
+      }
+
+      if (incidentsWithoutAddress.length > 0) {
+        const allUnitsInAddressedIncidents = new Set<string>();
+        for (const incident of incidentsWithAddress) {
+          if (incident.units) {
+            incident.units.forEach(unit => allUnitsInAddressedIncidents.add(unit));
+          }
+        }
+
+        for (const incident of incidentsWithoutAddress) {
+          if (!incident.units || incident.units.length === 0) {
+            console.log(`  → Removing incident ${incident.id} with no address and no units`);
+            continue;
+          }
+
+          const hasUniqueUnits = incident.units.some(unit => !allUnitsInAddressedIncidents.has(unit));
+
+          if (hasUniqueUnits) {
+            deduplicated.push(incident);
+          } else {
+            console.log(`  → Removing incident ${incident.id} with no address - all units are in addressed incidents`);
+          }
+        }
       }
     }
     console.log(`Address+CallType deduplication: ${finalIncidents.length} → ${deduplicated.length} incidents`);

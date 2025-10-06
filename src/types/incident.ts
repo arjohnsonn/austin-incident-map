@@ -12,7 +12,7 @@ export interface FireIncident {
   traffic_report_status: 'ACTIVE' | 'ARCHIVED';
   traffic_report_status_date_time: string;
   agency: string;
-  incidentType: 'fire' | 'traffic' | 'dispatch';
+  incidentType: 'fire' | 'medical' | 'traffic';
   units?: string[];
   channels?: string[];
   audioUrl?: string;

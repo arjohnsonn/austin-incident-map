@@ -63,7 +63,7 @@ async function fetchBroadcastifyLiveCalls(lastPos?: number, init?: boolean): Pro
         traffic_report_status: 'ACTIVE' as const,
         traffic_report_status_date_time: timestamp.toISOString(),
         agency: 'Austin Fire Department',
-        incidentType: 'dispatch' as const,
+        incidentType: incident.incidentType,
         units: incident.units,
         channels: incident.channels,
         audioUrl: incident.audioUrl,
@@ -227,15 +227,74 @@ export function useFireIncidents() {
         const allIncidents = [...dispatchIncidentsRef.current, ...prevIncidents];
         console.log('Combined before dedup:', allIncidents.length);
 
-        const deduped = Array.from(
+        const dedupById = Array.from(
           new Map(allIncidents.map(inc => [inc.traffic_report_id, inc])).values()
         );
 
-        console.log('After deduplication:', deduped.length, 'incidents');
-        console.log('Final incident IDs:', deduped.map(i => i.traffic_report_id));
+        const normalizeCallType = (callType: string) => {
+          return callType.toLowerCase().replace(/[^a-z0-9]/g, '');
+        };
+
+        const seenByCallType = new Map<string, FireIncident[]>();
+        const finalDeduped: FireIncident[] = [];
+
+        for (const incident of dedupById) {
+          const normalizedCallType = normalizeCallType(incident.issue_reported);
+
+          if (!seenByCallType.has(normalizedCallType)) {
+            seenByCallType.set(normalizedCallType, []);
+          }
+          seenByCallType.get(normalizedCallType)!.push(incident);
+        }
+
+        for (const [callType, incidents] of seenByCallType.entries()) {
+          const incidentsWithAddress = incidents.filter(inc => inc.address && inc.address !== '?');
+          const incidentsWithoutAddress = incidents.filter(inc => !inc.address || inc.address === '?');
+
+          const grouped = new Map<string, FireIncident[]>();
+
+          for (const incident of incidentsWithAddress) {
+            const normalizedAddress = incident.address.trim().toLowerCase();
+            if (!grouped.has(normalizedAddress)) {
+              grouped.set(normalizedAddress, []);
+            }
+            grouped.get(normalizedAddress)!.push(incident);
+          }
+
+          for (const [address, addressIncidents] of grouped.entries()) {
+            const sorted = addressIncidents.sort((a, b) =>
+              new Date(b.published_date).getTime() - new Date(a.published_date).getTime()
+            );
+            finalDeduped.push(sorted[0]);
+          }
+
+          if (incidentsWithoutAddress.length > 0) {
+            const allUnitsInAddressedIncidents = new Set<string>();
+            for (const incident of incidentsWithAddress) {
+              if (incident.units) {
+                incident.units.forEach(unit => allUnitsInAddressedIncidents.add(unit));
+              }
+            }
+
+            for (const incident of incidentsWithoutAddress) {
+              if (!incident.units || incident.units.length === 0) {
+                continue;
+              }
+
+              const hasUniqueUnits = incident.units.some(unit => !allUnitsInAddressedIncidents.has(unit));
+
+              if (hasUniqueUnits) {
+                finalDeduped.push(incident);
+              }
+            }
+          }
+        }
+
+        console.log('After deduplication:', finalDeduped.length, 'incidents');
+        console.log('Final incident IDs:', finalDeduped.map(i => i.traffic_report_id));
         console.log('=== FETCH END ===\n');
 
-        return deduped;
+        return finalDeduped;
       });
 
       setLastUpdated(new Date());
@@ -316,5 +375,26 @@ export function useFireIncidents() {
     console.log('=== SET POSITION END ===\n');
   }, []);
 
-  return { incidents, error, lastUpdated, isManualRefresh, isLoading, refetch: manualRefetch, setPosition, fetchInitial };
+  const resetStorage = useCallback(() => {
+    console.log('=== RESET STORAGE ===');
+
+    localStorage.removeItem(CACHE_KEY_INCIDENTS);
+    localStorage.removeItem(CACHE_KEY_LASTPOS);
+
+    lastPosRef.current = 0;
+    dispatchIncidentsRef.current = [];
+    isInitializedRef.current = false;
+
+    setIncidents([]);
+    setIsLoading(true);
+
+    console.log('Storage cleared, re-initializing...');
+
+    setTimeout(() => {
+      isInitializedRef.current = true;
+      fetchData(true, true);
+    }, 100);
+  }, [fetchData]);
+
+  return { incidents, error, lastUpdated, isManualRefresh, isLoading, refetch: manualRefetch, setPosition, fetchInitial, resetStorage };
 }
