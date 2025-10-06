@@ -66,6 +66,7 @@ async function fetchBroadcastifyLiveCalls(lastPos?: number, init?: boolean): Pro
         channels: incident.channels,
         audioUrl: incident.audioUrl,
         rawTranscript: incident.rawTranscript,
+        estimatedResolutionMinutes: incident.estimatedResolutionMinutes,
       };
     });
 

@@ -55,8 +55,9 @@ Extract:
 - units: Array of responding units (e.g., ["Engine 13", "Truck 3", "Medic 5", "Quint 34"]). Common unit types: Engine, Truck, Ladder, Medic, Ambulance, Battalion, Squad, Rescue, Brush, Quint. Note: "Quinn" in audio is actually "Quint" (a fire apparatus type). IMPORTANT: DO NOT extract "ESD" (Emergency Services District) numbers as units - "ESD 14" is a geographic area, not a unit. DO NOT extract alarm box identifiers (e.g., "box BL1", "box 123") as units. Only extract actual apparatus/unit callouts. Unit numbers should NOT contain dashes - remove any dashes from unit numbers (e.g., "14-01" becomes "1401", "12-02" becomes "1202").
 - channels: Array of tactical/radio channels ONLY. Valid channels are: F-TAC (fire tactical), Firecom, Medcom. Format F-TAC channels as "F-TAC-###" (e.g., "F-TAC-201" NOT "FD-201"). DO NOT include "Box" numbers as channels - those are alarm box identifiers, not radio channels. Examples: ["F-TAC-203"], ["Firecom 1"], ["Medcom 2"]
 - address: Street address (e.g., "2328 Hartford Road")
+- estimatedResolutionMinutes: Estimated time in minutes until this incident is likely resolved. Guidelines: Medical calls (chest pain, respiratory, unconscious) ~30min, Traffic accidents ~45min, Fire alarm activation ~15min, Lift assist ~20min, First Alarm ~60min, Second Alarm ~120min, Third Alarm+ ~180min, Vehicle fire ~30min, Structure fire without alarm level ~45min, Hazmat ~90min, Rescue ~60min. Consider severity and number of responding units. You do not have to follow these, these are just examples.
 
-Return valid JSON only. If something isn't mentioned, use null or empty array.`
+Return valid JSON only. If something isn't mentioned, use null or empty array. estimatedResolutionMinutes must be a number.`
         },
         {
           role: 'user',
@@ -79,6 +80,7 @@ Return valid JSON only. If something isn't mentioned, use null or empty array.`
       units: cleanedUnits,
       channels: result.channels || [],
       address: result.address || null,
+      estimatedResolutionMinutes: result.estimatedResolutionMinutes || 60,
     });
 
     console.log('--- AI DISPATCH PARSER END ---\n');
@@ -88,6 +90,7 @@ Return valid JSON only. If something isn't mentioned, use null or empty array.`
       units: cleanedUnits,
       channels: result.channels || [],
       address: result.address || null,
+      estimatedResolutionMinutes: result.estimatedResolutionMinutes || 60,
       rawTranscript: transcript,
     };
   } catch (error) {
@@ -199,6 +202,7 @@ export function parseDispatchCall(transcript: string): ParsedDispatchCall {
   console.log('Units:', units.length > 0 ? units.join(', ') : 'none');
   console.log('Channels:', channels.length > 0 ? channels.join(', ') : 'none');
   console.log('Address:', address || 'null');
+  console.log('Estimated Resolution:', '60 minutes (fallback default)');
   console.log('--- DISPATCH PARSER END ---\n');
 
   return {
@@ -206,6 +210,7 @@ export function parseDispatchCall(transcript: string): ParsedDispatchCall {
     units,
     channels,
     address,
+    estimatedResolutionMinutes: 60,
     rawTranscript: cleanedTranscript,
   };
 }

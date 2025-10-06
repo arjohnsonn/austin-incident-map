@@ -17,10 +17,11 @@ export interface FireIncident {
   channels?: string[];
   audioUrl?: string;
   rawTranscript?: string;
+  estimatedResolutionMinutes?: number;
 }
 
 export type IncidentStatus = 'ACTIVE' | 'ARCHIVED' | 'ALL';
-export type DateRange = 'LAST_30_MINS' | 'LAST_HOUR' | 'LAST_4_HOURS' | 'LAST_12_HOURS' | 'TODAY' | 'WEEK' | 'CUSTOM';
+export type DateRange = 'DYNAMIC' | 'LAST_30_MINS' | 'LAST_HOUR' | 'LAST_4_HOURS' | 'LAST_12_HOURS' | 'TODAY' | 'WEEK' | 'CUSTOM';
 
 export interface FilterState {
   search: string;

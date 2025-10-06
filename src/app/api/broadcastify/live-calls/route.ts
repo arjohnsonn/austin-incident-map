@@ -46,112 +46,6 @@ function preprocessAddress(address: string): string[] {
   return variations;
 }
 
-function levenshteinDistance(str1: string, str2: string): number {
-  const matrix: number[][] = [];
-
-  for (let i = 0; i <= str2.length; i++) {
-    matrix[i] = [i];
-  }
-
-  for (let j = 0; j <= str1.length; j++) {
-    matrix[0][j] = j;
-  }
-
-  for (let i = 1; i <= str2.length; i++) {
-    for (let j = 1; j <= str1.length; j++) {
-      if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
-        matrix[i][j] = matrix[i - 1][j - 1];
-      } else {
-        matrix[i][j] = Math.min(
-          matrix[i - 1][j - 1] + 1,
-          matrix[i][j - 1] + 1,
-          matrix[i - 1][j] + 1
-        );
-      }
-    }
-  }
-
-  return matrix[str2.length][str1.length];
-}
-
-async function fuzzyStreetSearch(address: string): Promise<[number, number] | null> {
-  const streetMatch = address.match(/\d+\s+(.+?)(?:\s+(?:Street|St|Avenue|Ave|Boulevard|Blvd|Drive|Dr|Road|Rd|Lane|Ln|Way|Court|Ct|Circle|Cir))?$/i);
-
-  if (!streetMatch) {
-    console.log('  → Could not extract street name for fuzzy search');
-    return null;
-  }
-
-  const streetName = streetMatch[1].trim();
-  console.log(`  → Attempting fuzzy search for street: "${streetName}"`);
-
-  try {
-    const response = await fetch(
-      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(streetName + ' Austin TX')}&format=json&limit=10&countrycodes=us`,
-      {
-        headers: {
-          'User-Agent': 'Austin-Fire-Map/1.0',
-        },
-      }
-    );
-    const results = await response.json();
-
-    if (!results || results.length === 0) {
-      console.log('  → No fuzzy matches found');
-      return null;
-    }
-
-    let bestMatch: any = null;
-    let bestDistance = Infinity;
-
-    for (const result of results) {
-      const displayName = result.display_name.toLowerCase();
-      const streetNameLower = streetName.toLowerCase();
-
-      const distance = levenshteinDistance(streetNameLower, result.display_name.toLowerCase());
-
-      if (distance < bestDistance && displayName.includes('austin') && displayName.includes('texas')) {
-        bestDistance = distance;
-        bestMatch = result;
-      }
-    }
-
-    if (bestMatch && bestDistance <= 3) {
-      console.log(`  → ✓ Fuzzy match found (distance: ${bestDistance}): ${bestMatch.display_name}`);
-
-      const houseNumber = address.match(/^\d+/)?.[0];
-      if (houseNumber) {
-        const streetFromMatch = bestMatch.display_name.split(',')[0];
-        const correctedAddress = `${houseNumber} ${streetFromMatch}`;
-        console.log(`  → Trying corrected address: "${correctedAddress}"`);
-
-        const verifyResponse = await fetch(
-          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(correctedAddress + ', Austin, TX')}&format=json&limit=1&countrycodes=us`,
-          {
-            headers: {
-              'User-Agent': 'Austin-Fire-Map/1.0',
-            },
-          }
-        );
-        const verifyData = await verifyResponse.json();
-
-        if (verifyData && verifyData.length > 0) {
-          console.log(`  → ✓✓ Verified corrected address!`);
-          return [parseFloat(verifyData[0].lon), parseFloat(verifyData[0].lat)];
-        }
-      }
-
-      return [parseFloat(bestMatch.lon), parseFloat(bestMatch.lat)];
-    }
-
-    console.log(`  → No close fuzzy matches (best distance: ${bestDistance})`);
-  } catch (error) {
-    console.error('  → Fuzzy search error:', error);
-  }
-
-  return null;
-}
-
 async function geocodeAddress(address: string): Promise<[number, number] | null> {
   const addressVariations = preprocessAddress(address);
 
@@ -180,18 +74,10 @@ async function geocodeAddress(address: string): Promise<[number, number] | null>
           console.log(`✓ Geocoding successful: [${result.lon}, ${result.lat}] - ${result.display_name}`);
           return [parseFloat(result.lon), parseFloat(result.lat)];
         }
-
-        await new Promise(resolve => setTimeout(resolve, 100));
       } catch (error) {
         console.error(`Geocoding error for query "${query}":`, error);
       }
     }
-  }
-
-  console.log(`⚠️ Exact geocoding failed, trying fuzzy street name matching...`);
-  const fuzzyResult = await fuzzyStreetSearch(address);
-  if (fuzzyResult) {
-    return fuzzyResult;
   }
 
   console.log(`❌ All geocoding attempts failed for: ${address}`);
@@ -312,6 +198,7 @@ export async function GET(request: NextRequest) {
           rawTranscript: transcript,
           groupId: call.groupId,
           duration: call.duration,
+          estimatedResolutionMinutes: parsed.estimatedResolutionMinutes,
         };
 
         if (coordinates) {
@@ -327,7 +214,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const BATCH_SIZE = 5;
+    const BATCH_SIZE = 15;
     const processedIncidents: DispatchIncident[] = [];
 
     for (let i = 0; i < data.calls.length; i += BATCH_SIZE) {

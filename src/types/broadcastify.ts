@@ -31,6 +31,7 @@ export interface ParsedDispatchCall {
   units: string[];
   channels: string[];
   address: string | null;
+  estimatedResolutionMinutes: number;
   rawTranscript: string;
 }
 
@@ -49,4 +50,5 @@ export interface DispatchIncident {
   rawTranscript: string;
   groupId: string;
   duration: number;
+  estimatedResolutionMinutes: number;
 }

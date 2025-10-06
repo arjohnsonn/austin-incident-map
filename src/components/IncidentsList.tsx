@@ -316,7 +316,7 @@ export function IncidentsList({
   const [filters, setFilters] = useState<FilterState>({
     search: "",
     status: "ACTIVE",
-    dateRange: "LAST_12_HOURS",
+    dateRange: "DYNAMIC",
     startDate: undefined,
     endDate: undefined,
     agency: "ALL",
@@ -331,6 +331,8 @@ export function IncidentsList({
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
     switch (range) {
+      case "DYNAMIC":
+        return { start: undefined, end: undefined };
       case "LAST_30_MINS":
         return {
           start: new Date(now.getTime() - 30 * 60 * 1000),
@@ -364,10 +366,7 @@ export function IncidentsList({
       case "CUSTOM":
         return { start: filters.startDate, end: filters.endDate };
       default:
-        return {
-          start: new Date(now.getTime() - 12 * 60 * 60 * 1000),
-          end: now,
-        };
+        return { start: undefined, end: undefined };
     }
   }, [filters.startDate, filters.endDate]);
 
@@ -402,19 +401,31 @@ export function IncidentsList({
         return false;
       }
 
-      const dateRange = getDateRange(filters.dateRange);
-      if (dateRange.start || dateRange.end) {
-        const incidentDate = new Date(incident.published_date);
+      if (filters.dateRange === "DYNAMIC") {
+        if (incident.estimatedResolutionMinutes) {
+          const incidentDate = new Date(incident.published_date);
+          const now = new Date();
+          const minutesSinceIncident = (now.getTime() - incidentDate.getTime()) / (1000 * 60);
 
-        if (dateRange.start) {
-          if (incidentDate < dateRange.start) {
+          if (minutesSinceIncident > incident.estimatedResolutionMinutes) {
             return false;
           }
         }
+      } else {
+        const dateRange = getDateRange(filters.dateRange);
+        if (dateRange.start || dateRange.end) {
+          const incidentDate = new Date(incident.published_date);
 
-        if (dateRange.end) {
-          if (incidentDate > dateRange.end) {
-            return false;
+          if (dateRange.start) {
+            if (incidentDate < dateRange.start) {
+              return false;
+            }
+          }
+
+          if (dateRange.end) {
+            if (incidentDate > dateRange.end) {
+              return false;
+            }
           }
         }
       }
@@ -451,7 +462,7 @@ export function IncidentsList({
     setFilters({
       search: "",
       status: "ACTIVE",
-      dateRange: "LAST_12_HOURS",
+      dateRange: "DYNAMIC",
       startDate: undefined,
       endDate: undefined,
       agency: "ALL",
@@ -581,6 +592,7 @@ export function IncidentsList({
               <SelectValue placeholder="Date Range" />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="DYNAMIC">Dynamic</SelectItem>
               <SelectItem value="LAST_30_MINS">Last 30 Mins</SelectItem>
               <SelectItem value="LAST_HOUR">Last Hour</SelectItem>
               <SelectItem value="LAST_4_HOURS">Last 4 Hours</SelectItem>
@@ -626,7 +638,7 @@ export function IncidentsList({
           {(filters.search ||
             filters.status !== "ALL" ||
             filters.agency !== "ALL" ||
-            filters.dateRange !== "LAST_12_HOURS" ||
+            filters.dateRange !== "DYNAMIC" ||
             filters.startDate ||
             filters.endDate) && (
             <Button variant="ghost" size="sm" onClick={clearFilters}>
