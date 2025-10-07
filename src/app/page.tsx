@@ -50,13 +50,14 @@ export default function Home() {
   );
 
   const finalIncidents = useMemo(() => {
-    let filtered = incidents;
+    const idsToFilter = new Set([
+      ...(replayingIncident ? [replayingIncident.traffic_report_id] : []),
+      ...replayInjectedIncidents.map(inc => inc.traffic_report_id)
+    ]);
 
-    if (replayingIncident) {
-      filtered = filtered.filter(
-        (inc) => inc.traffic_report_id !== replayingIncident.traffic_report_id
-      );
-    }
+    const filtered = idsToFilter.size > 0
+      ? incidents.filter((inc) => !idsToFilter.has(inc.traffic_report_id))
+      : incidents;
 
     return [...replayInjectedIncidents, ...filtered];
   }, [incidents, replayingIncident, replayInjectedIncidents]);
@@ -94,6 +95,10 @@ export default function Home() {
       setReplayInjectedIncidents([incident]);
       setReplayingIncident(null);
     }, 3000);
+
+    setTimeout(() => {
+      setReplayInjectedIncidents([]);
+    }, 10000);
   }, [replayingIncident]);
 
   useEffect(() => {
