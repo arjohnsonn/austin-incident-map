@@ -340,11 +340,16 @@ export function useFireIncidents() {
         };
 
         const addressesSimilar = (addr1: string | undefined, addr2: string | undefined): boolean => {
+          if (!addr1 || !addr2 || addr1 === '?' || addr2 === '?') return false;
+
           const norm1 = normalizeAddress(addr1);
           const norm2 = normalizeAddress(addr2);
 
-          if (!norm1 || !norm2) return false;
           if (norm1 === norm2) return true;
+
+          if (norm1.includes(norm2) || norm2.includes(norm1)) {
+            return true;
+          }
 
           const extractNumbers = (s: string) => s.match(/\d+/g) || [];
           const nums1 = extractNumbers(norm1);
@@ -353,7 +358,26 @@ export function useFireIncidents() {
           if (nums1.length > 0 && nums2.length > 0 && nums1[0] === nums2[0]) {
             const baseAddr1 = norm1.replace(/^\d+/, '');
             const baseAddr2 = norm2.replace(/^\d+/, '');
-            return baseAddr1 === baseAddr2;
+
+            if (baseAddr1.includes(baseAddr2) || baseAddr2.includes(baseAddr1)) {
+              return true;
+            }
+
+            if (baseAddr1 === baseAddr2) return true;
+          }
+
+          const extractMainStreet = (s: string) => {
+            const lower = s.toLowerCase();
+            const words = lower.match(/\b[a-z]+\b/g) || [];
+            const mainWords = words.slice(0, 2);
+            return mainWords.join('');
+          };
+
+          const mainStreet1 = extractMainStreet(addr1);
+          const mainStreet2 = extractMainStreet(addr2);
+
+          if (mainStreet1.length >= 6 && mainStreet2.length >= 6 && mainStreet1 === mainStreet2) {
+            return true;
           }
 
           return false;

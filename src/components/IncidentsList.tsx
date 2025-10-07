@@ -5,6 +5,7 @@ import { format } from "date-fns";
 import { Search, Calendar, RefreshCw, Play, Pause, Trash2, Volume2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Tooltip,
   TooltipContent,
@@ -366,6 +367,69 @@ const VirtualizedList = memo(
 
 VirtualizedList.displayName = "VirtualizedList";
 
+const SkeletonLoader = ({ columnWidths }: { columnWidths: { play: number; time: number; callType: number; address: number; units: number; channels: number } }) => {
+  return (
+    <div className="flex flex-col">
+      <div className="bg-neutral-900 dark:bg-black text-white text-xs font-bold px-2 py-2 border-b-2 border-neutral-600 sticky top-0 z-10 min-w-[800px]">
+        <div className="flex items-center">
+          <div style={{ width: columnWidths.play }} className="text-center flex-shrink-0 flex items-center justify-center">
+            <Volume2 className="w-3 h-3" />
+          </div>
+          <div style={{ width: columnWidths.time }} className="text-center flex-shrink-0">
+            TIME
+          </div>
+          <div style={{ width: columnWidths.callType }} className="px-2 flex-shrink-0">
+            CALL TYPE
+          </div>
+          <div style={{ width: columnWidths.address }} className="px-2 flex-shrink-0">
+            ADDRESS
+          </div>
+          <div style={{ width: columnWidths.units }} className="px-2 flex-shrink-0">
+            UNITS
+          </div>
+          <div style={{ width: columnWidths.channels }} className="px-2 flex-shrink-0">
+            CHANNEL
+          </div>
+        </div>
+      </div>
+      <div className="space-y-0">
+        {Array.from({ length: 15 }).map((_, i) => (
+          <div
+            key={i}
+            className={`border-b border-neutral-300 dark:border-neutral-600 min-w-[800px] ${
+              i % 2 === 0
+                ? "bg-neutral-50 dark:bg-neutral-900"
+                : "bg-white dark:bg-neutral-800"
+            }`}
+            style={{ height: ITEM_HEIGHT }}
+          >
+            <div className="flex items-center h-full px-2">
+              <div style={{ width: columnWidths.play }} className="flex items-center justify-center flex-shrink-0">
+                <Skeleton className="w-3 h-3 rounded-full" />
+              </div>
+              <div style={{ width: columnWidths.time }} className="text-center flex-shrink-0 px-2">
+                <Skeleton className="h-3 w-full" />
+              </div>
+              <div style={{ width: columnWidths.callType }} className="px-2 flex-shrink-0">
+                <Skeleton className="h-3 w-full" />
+              </div>
+              <div style={{ width: columnWidths.address }} className="px-2 flex-shrink-0">
+                <Skeleton className="h-3 w-full" />
+              </div>
+              <div style={{ width: columnWidths.units }} className="px-2 flex-shrink-0">
+                <Skeleton className="h-3 w-full" />
+              </div>
+              <div style={{ width: columnWidths.channels }} className="px-2 flex-shrink-0">
+                <Skeleton className="h-3 w-full" />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 export function IncidentsList({
   incidents,
   selectedIncident,
@@ -724,8 +788,19 @@ export function IncidentsList({
       </div>
 
       {/* Incidents List */}
-      <div className="flex flex-col flex-1">
-        {allFilteredIncidents.length === 0 ? (
+      <div className="flex flex-col flex-1 overflow-hidden">
+        {loading && incidents.length === 0 ? (
+          <div className="overflow-auto">
+            <SkeletonLoader columnWidths={{
+              play: 32,
+              time: 80,
+              callType: 168,
+              address: 192,
+              units: 128,
+              channels: 110,
+            }} />
+          </div>
+        ) : allFilteredIncidents.length === 0 ? (
           <div className="flex items-center justify-center flex-1">
             <div className="text-center text-neutral-500 py-8">
               No incidents found matching your filters.
