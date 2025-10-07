@@ -147,7 +147,20 @@ async function transcribeAudio(audioUrl: string): Promise<string> {
   try {
     const audioResponse = await fetch(audioUrl);
     const audioBuffer = await audioResponse.arrayBuffer();
-    const audioFile = new File([audioBuffer], 'audio.mp3', { type: 'audio/mpeg' });
+
+    const extension = audioUrl.split('.').pop()?.toLowerCase() || 'mp3';
+    const mimeTypes: Record<string, string> = {
+      'mp3': 'audio/mpeg',
+      'mp4': 'audio/mp4',
+      'm4a': 'audio/mp4',
+      'wav': 'audio/wav',
+      'webm': 'audio/webm',
+      'ogg': 'audio/ogg',
+      'flac': 'audio/flac',
+    };
+
+    const mimeType = mimeTypes[extension] || 'audio/mpeg';
+    const audioFile = new File([audioBuffer], `audio.${extension}`, { type: mimeType });
 
     const transcription = await openai.audio.transcriptions.create({
       file: audioFile,
