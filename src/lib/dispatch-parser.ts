@@ -32,9 +32,9 @@ function preprocessTranscript(transcript: string): string {
 
   processed = processed.replace(/\bASD\b/gi, 'AFD');
   processed = processed.replace(/\bAFV\b/gi, 'AFD');
-  processed = processed.replace(/\ball\s+in\b/gi, 'alarm');
-  processed = processed.replace(/\bfall\s+in\b/gi, 'alarm');
   processed = processed.replace(/\bQuinn\s+(\d+)\b/gi, 'Quint $1');
+  processed = processed.replace(/\bthree\s+down\b/gi, 'tree down');
+  processed = processed.replace(/\bpower\s+lines?\s+down\b/gi, 'powerline down');
 
   return processed;
 }
@@ -42,6 +42,11 @@ function preprocessTranscript(transcript: string): string {
 export async function parseDispatchCallWithAI(transcript: string): Promise<ParsedDispatchCall> {
   console.log('\n--- AI DISPATCH PARSER START ---');
   console.log('Original transcript:', transcript);
+
+  const cleanedTranscript = preprocessTranscript(transcript);
+  if (cleanedTranscript !== transcript) {
+    console.log('After preprocessing:', cleanedTranscript);
+  }
 
   try {
     const completion = await openai.chat.completions.create({
@@ -64,7 +69,7 @@ Return valid JSON only. If something isn't mentioned, use null or empty array. e
         },
         {
           role: 'user',
-          content: transcript
+          content: cleanedTranscript
         }
       ],
       response_format: { type: 'json_object' },
@@ -100,7 +105,7 @@ Return valid JSON only. If something isn't mentioned, use null or empty array. e
       address: result.address || null,
       addressVariants: result.addressVariants || [],
       estimatedResolutionMinutes: result.estimatedResolutionMinutes || 60,
-      rawTranscript: transcript,
+      rawTranscript: cleanedTranscript,
     };
   } catch (error) {
     console.error('AI parsing failed, falling back to regex parser:', error);
