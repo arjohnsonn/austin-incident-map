@@ -354,7 +354,7 @@ export async function GET(request: NextRequest) {
       seenByCallType.get(normalizedCallType)!.push(incident);
     }
 
-    for (const [callType, incidents] of seenByCallType.entries()) {
+    for (const [, incidents] of seenByCallType.entries()) {
       const incidentsWithAddress = incidents.filter(inc => inc.address && inc.address !== '?');
       const incidentsWithoutAddress = incidents.filter(inc => !inc.address || inc.address === '?');
 
@@ -405,6 +405,117 @@ export async function GET(request: NextRequest) {
       }
     }
     console.log(`Address+CallType deduplication: ${finalIncidents.length} → ${deduplicated.length} incidents`);
+
+    console.log('\nMerging related incidents with partial information...');
+    const TIME_WINDOW_MS = 5 * 60 * 1000;
+
+    const normalizeAddress = (addr: string | undefined): string => {
+      if (!addr || addr === '?') return '';
+      return addr
+        .toLowerCase()
+        .replace(/\s+/g, '')
+        .replace(/[^a-z0-9]/g, '');
+    };
+
+    const addressesSimilar = (addr1: string | undefined, addr2: string | undefined): boolean => {
+      const norm1 = normalizeAddress(addr1);
+      const norm2 = normalizeAddress(addr2);
+
+      if (!norm1 || !norm2) return false;
+      if (norm1 === norm2) return true;
+
+      const extractNumbers = (s: string) => s.match(/\d+/g) || [];
+      const nums1 = extractNumbers(norm1);
+      const nums2 = extractNumbers(norm2);
+
+      if (nums1.length > 0 && nums2.length > 0 && nums1[0] === nums2[0]) {
+        const baseAddr1 = norm1.replace(/^\d+/, '');
+        const baseAddr2 = norm2.replace(/^\d+/, '');
+        return baseAddr1 === baseAddr2;
+      }
+
+      return false;
+    };
+
+    for (let i = 0; i < deduplicated.length; i++) {
+      const incident = deduplicated[i];
+      const hasValidCallType = incident.callType && incident.callType !== '?' && incident.callType !== '-';
+      const hasValidAddress = incident.address && incident.address !== '?';
+      const hasCoordinates = !!incident.location;
+
+      for (let j = i + 1; j < deduplicated.length; j++) {
+        const other = deduplicated[j];
+        const otherHasValidCallType = other.callType && other.callType !== '?' && other.callType !== '-';
+        const otherHasValidAddress = other.address && other.address !== '?';
+        const otherHasCoordinates = !!other.location;
+
+        const timeDiff = Math.abs(
+          new Date(incident.timestamp).getTime() - new Date(other.timestamp).getTime()
+        );
+
+        if (timeDiff > TIME_WINDOW_MS) continue;
+
+        const hasOverlappingUnits = incident.units && other.units &&
+          incident.units.some(unit => other.units?.includes(unit));
+
+        const similarAddresses = addressesSimilar(incident.address, other.address);
+
+        const shouldMerge = (timeDiff < 120000 && hasOverlappingUnits) ||
+                           (timeDiff < 60000 && similarAddresses);
+
+        if (!shouldMerge) continue;
+
+        let targetIncident = incident;
+        let sourceIncident = other;
+        let targetIndex = i;
+        let sourceIndex = j;
+
+        if (otherHasCoordinates && !hasCoordinates) {
+          targetIncident = other;
+          sourceIncident = incident;
+          targetIndex = j;
+          sourceIndex = i;
+        }
+
+        if (!targetIncident.callType || targetIncident.callType === '?' || targetIncident.callType === '-') {
+          if (sourceIncident.callType && sourceIncident.callType !== '?' && sourceIncident.callType !== '-') {
+            console.log(`  → Merging callType "${sourceIncident.callType}" from ${sourceIncident.id} into ${targetIncident.id}`);
+            targetIncident.callType = sourceIncident.callType;
+          }
+        }
+
+        if (!targetIncident.address || targetIncident.address === '?') {
+          if (sourceIncident.address && sourceIncident.address !== '?') {
+            console.log(`  → Merging address "${sourceIncident.address}" from ${sourceIncident.id} into ${targetIncident.id}`);
+            targetIncident.address = sourceIncident.address;
+          }
+        }
+
+        if (!targetIncident.location && sourceIncident.location) {
+          console.log(`  → Merging coordinates from ${sourceIncident.id} into ${targetIncident.id}`);
+          targetIncident.location = sourceIncident.location;
+        }
+
+        if (!targetIncident.units || targetIncident.units.length === 0) {
+          if (sourceIncident.units && sourceIncident.units.length > 0) {
+            targetIncident.units = sourceIncident.units;
+          }
+        } else if (sourceIncident.units && sourceIncident.units.length > 0) {
+          const combinedUnits = [...new Set([...targetIncident.units, ...sourceIncident.units])];
+          targetIncident.units = combinedUnits;
+        }
+
+        console.log(`  → Removing duplicate incident ${sourceIncident.id}`);
+        deduplicated.splice(sourceIndex, 1);
+
+        if (sourceIndex < targetIndex) {
+          i--;
+        }
+        j--;
+      }
+    }
+
+    console.log(`After merging related incidents: ${deduplicated.length} incidents`);
 
     const skippedCount = data.calls.length - processedIncidents.length;
     const reassignedCount = processedIncidents.length - finalIncidents.length;

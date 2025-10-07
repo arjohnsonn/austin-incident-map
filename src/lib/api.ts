@@ -283,7 +283,7 @@ export function useFireIncidents() {
           seenByCallType.get(normalizedCallType)!.push(incident);
         }
 
-        for (const [callType, incidents] of seenByCallType.entries()) {
+        for (const [, incidents] of seenByCallType.entries()) {
           const incidentsWithAddress = incidents.filter(inc => inc.address && inc.address !== '?');
           const incidentsWithoutAddress = incidents.filter(inc => !inc.address || inc.address === '?');
 
@@ -327,6 +327,121 @@ export function useFireIncidents() {
         }
 
         console.log('After address+callType deduplication:', finalDeduped.length, 'incidents');
+
+        console.log('\n--- MERGING RELATED INCIDENTS WITH PARTIAL INFORMATION ---');
+        const TIME_WINDOW_MS = 5 * 60 * 1000;
+
+        const normalizeAddress = (addr: string | undefined): string => {
+          if (!addr || addr === '?') return '';
+          return addr
+            .toLowerCase()
+            .replace(/\s+/g, '')
+            .replace(/[^a-z0-9]/g, '');
+        };
+
+        const addressesSimilar = (addr1: string | undefined, addr2: string | undefined): boolean => {
+          const norm1 = normalizeAddress(addr1);
+          const norm2 = normalizeAddress(addr2);
+
+          if (!norm1 || !norm2) return false;
+          if (norm1 === norm2) return true;
+
+          const extractNumbers = (s: string) => s.match(/\d+/g) || [];
+          const nums1 = extractNumbers(norm1);
+          const nums2 = extractNumbers(norm2);
+
+          if (nums1.length > 0 && nums2.length > 0 && nums1[0] === nums2[0]) {
+            const baseAddr1 = norm1.replace(/^\d+/, '');
+            const baseAddr2 = norm2.replace(/^\d+/, '');
+            return baseAddr1 === baseAddr2;
+          }
+
+          return false;
+        };
+
+        for (let i = 0; i < finalDeduped.length; i++) {
+          const incident = finalDeduped[i];
+          const hasValidCallType = incident.issue_reported && incident.issue_reported !== '?' && incident.issue_reported !== '-';
+          const hasValidAddress = incident.address && incident.address !== '?';
+          const hasCoordinates = !!(incident.location && incident.location.coordinates && incident.location.coordinates[0] !== 0);
+
+          for (let j = i + 1; j < finalDeduped.length; j++) {
+            const other = finalDeduped[j];
+            const otherHasValidCallType = other.issue_reported && other.issue_reported !== '?' && other.issue_reported !== '-';
+            const otherHasValidAddress = other.address && other.address !== '?';
+            const otherHasCoordinates = !!(other.location && other.location.coordinates && other.location.coordinates[0] !== 0);
+
+            const timeDiff = Math.abs(
+              new Date(incident.published_date).getTime() - new Date(other.published_date).getTime()
+            );
+
+            if (timeDiff > TIME_WINDOW_MS) continue;
+
+            const hasOverlappingUnits = incident.units && other.units &&
+              incident.units.some(unit => other.units?.includes(unit));
+
+            const similarAddresses = addressesSimilar(incident.address, other.address);
+
+            const shouldMerge = (timeDiff < 120000 && hasOverlappingUnits) ||
+                               (timeDiff < 60000 && similarAddresses);
+
+            if (!shouldMerge) continue;
+
+            let targetIncident = incident;
+            let sourceIncident = other;
+            let targetIndex = i;
+            let sourceIndex = j;
+
+            if (otherHasCoordinates && !hasCoordinates) {
+              targetIncident = other;
+              sourceIncident = incident;
+              targetIndex = j;
+              sourceIndex = i;
+            }
+
+            if (!targetIncident.issue_reported || targetIncident.issue_reported === '?' || targetIncident.issue_reported === '-') {
+              if (sourceIncident.issue_reported && sourceIncident.issue_reported !== '?' && sourceIncident.issue_reported !== '-') {
+                console.log(`  → Merging callType "${sourceIncident.issue_reported}" from ${sourceIncident.traffic_report_id} into ${targetIncident.traffic_report_id}`);
+                targetIncident.issue_reported = sourceIncident.issue_reported;
+              }
+            }
+
+            if (!targetIncident.address || targetIncident.address === '?') {
+              if (sourceIncident.address && sourceIncident.address !== '?') {
+                console.log(`  → Merging address "${sourceIncident.address}" from ${sourceIncident.traffic_report_id} into ${targetIncident.traffic_report_id}`);
+                targetIncident.address = sourceIncident.address;
+              }
+            }
+
+            if (!targetIncident.location || !targetIncident.location.coordinates || targetIncident.location.coordinates[0] === 0) {
+              if (sourceIncident.location && sourceIncident.location.coordinates && sourceIncident.location.coordinates[0] !== 0) {
+                console.log(`  → Merging coordinates from ${sourceIncident.traffic_report_id} into ${targetIncident.traffic_report_id}`);
+                targetIncident.location = sourceIncident.location;
+                targetIncident.latitude = sourceIncident.latitude;
+                targetIncident.longitude = sourceIncident.longitude;
+              }
+            }
+
+            if (!targetIncident.units || targetIncident.units.length === 0) {
+              if (sourceIncident.units && sourceIncident.units.length > 0) {
+                targetIncident.units = sourceIncident.units;
+              }
+            } else if (sourceIncident.units && sourceIncident.units.length > 0) {
+              const combinedUnits = [...new Set([...targetIncident.units, ...sourceIncident.units])];
+              targetIncident.units = combinedUnits;
+            }
+
+            console.log(`  → Removing duplicate incident ${sourceIncident.traffic_report_id}`);
+            finalDeduped.splice(sourceIndex, 1);
+
+            if (sourceIndex < targetIndex) {
+              i--;
+            }
+            j--;
+          }
+        }
+
+        console.log(`After merging related incidents: ${finalDeduped.length} incidents`);
         console.log('Final incident IDs:', finalDeduped.map(i => i.traffic_report_id));
         console.log('=== FETCH END ===\n');
 
