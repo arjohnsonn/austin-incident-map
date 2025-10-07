@@ -48,6 +48,7 @@ export default function Home() {
   const [replayInjectedIncidents, setReplayInjectedIncidents] = useState<FireIncident[]>(
     []
   );
+  const [newIncidentIds, setNewIncidentIds] = useState<Set<string>>(new Set());
 
   const finalIncidents = useMemo(() => {
     const idsToFilter = new Set([
@@ -70,10 +71,15 @@ export default function Home() {
   );
 
   const handleNewIncident = useCallback(
-    (incident: FireIncident) => {
+    (incident: FireIncident, newIds: Set<string>) => {
+      setNewIncidentIds(newIds);
       if (settings.showBanner) {
         setBannerIncident(incident);
       }
+
+      setTimeout(() => {
+        setNewIncidentIds(new Set());
+      }, 1500);
     },
     [settings.showBanner]
   );
@@ -166,6 +172,7 @@ export default function Home() {
             incidents={displayedIncidents}
             selectedIncident={selectedIncident}
             onIncidentSelect={setSelectedIncident}
+            newIncidentIds={newIncidentIds}
           />
         </ResizablePanel>
       </ResizablePanelGroup>

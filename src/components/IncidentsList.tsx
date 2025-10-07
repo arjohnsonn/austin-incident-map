@@ -37,7 +37,7 @@ interface IncidentsListProps {
   selectedIncident: FireIncident | null;
   onIncidentSelect: (incident: FireIncident) => void;
   onDisplayedIncidentsChange?: (incidents: FireIncident[]) => void;
-  onNewIncident?: (incident: FireIncident) => void;
+  onNewIncident?: (incident: FireIncident, newIds: Set<string>) => void;
   onAudioStateChange?: (playing: boolean) => void;
   loading?: boolean;
   lastUpdated?: Date | null;
@@ -65,7 +65,7 @@ const VirtualizedList = memo(
     selectedIncident: FireIncident | null;
     onIncidentSelect: (incident: FireIncident) => void;
     autoPlayAudio: boolean;
-    onNewIncident?: (incident: FireIncident) => void;
+    onNewIncident?: (incident: FireIncident, newIds: Set<string>) => void;
     onAudioStateChange?: (playing: boolean) => void;
     isInitialStream?: boolean;
   }) => {
@@ -217,7 +217,7 @@ const VirtualizedList = memo(
           )[0];
 
           if (onNewIncident) {
-            onNewIncident(mostRecentIncident);
+            onNewIncident(mostRecentIncident, newIds);
           }
 
           if (autoPlayAudio && mostRecentIncident.audioUrl) {

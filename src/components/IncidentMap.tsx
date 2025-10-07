@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { useTheme } from "next-themes";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -10,13 +10,21 @@ interface IncidentMapProps {
   incidents: FireIncident[];
   selectedIncident: FireIncident | null;
   onIncidentSelect: (incident: FireIncident) => void;
+  newIncidentIds?: Set<string>;
 }
+
+const EMPTY_SET = new Set<string>();
 
 export function IncidentMap({
   incidents,
   selectedIncident,
   onIncidentSelect,
+  newIncidentIds,
 }: IncidentMapProps) {
+  const stableNewIncidentIds = useMemo(
+    () => newIncidentIds || EMPTY_SET,
+    [newIncidentIds]
+  );
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const markers = useRef<Map<string, maplibregl.Marker>>(new Map());
@@ -43,6 +51,21 @@ export function IncidentMap({
           transform: scale(4);
           opacity: 0;
         }
+      }
+
+      @keyframes marker-flash {
+        0%, 20%, 40% {
+          box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7), 0 0 20px 5px rgba(239, 68, 68, 0.5);
+          transform: scale(1.2);
+        }
+        10%, 30%, 50%, 100% {
+          box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+          transform: scale(1);
+        }
+      }
+
+      .flash-marker {
+        animation: marker-flash 1.5s ease-in-out;
       }
 
 
@@ -313,6 +336,9 @@ export function IncidentMap({
         (inc) => inc.traffic_report_status === "ACTIVE"
       );
       const isCluster = group.length > 1;
+      const hasNewIncident = group.some((inc) =>
+        stableNewIncidentIds.has(inc.traffic_report_id)
+      );
 
       const activeIncidents = group.filter(
         (inc) => inc.traffic_report_status === "ACTIVE"
@@ -379,7 +405,7 @@ export function IncidentMap({
           hasActiveIncidents
             ? `w-6 h-6 ${colors.bg} border-2 ${colors.border} active-marker`
             : "w-6 h-6 bg-neutral-600 border-2 border-neutral-800"
-        }`;
+        } ${hasNewIncident ? 'flash-marker' : ''}`;
         markerEl.textContent = group.length.toString();
 
         if (hasActiveIncidents) {
@@ -401,7 +427,7 @@ export function IncidentMap({
               ? "border-[#959F1E] bg-[#959F1E]"
               : "border-yellow-500 bg-yellow-500";
 
-          markerEl.className = `w-4 h-4 rounded-full border-2 cursor-pointer ${colors} active-marker relative`;
+          markerEl.className = `w-4 h-4 rounded-full border-2 cursor-pointer ${colors} active-marker relative ${hasNewIncident ? 'flash-marker' : ''}`;
 
           const radarRing = document.createElement("div");
           const radarClass = incidentType === "fire" ? "fire-radar" : incidentType === "medical" ? "medical-radar" : "traffic-radar";
@@ -409,7 +435,7 @@ export function IncidentMap({
           markerEl.appendChild(radarRing);
         } else {
           markerEl.className =
-            "w-4 h-4 rounded-full border-2 cursor-pointer border-neutral-600 bg-neutral-400";
+            `w-4 h-4 rounded-full border-2 cursor-pointer border-neutral-600 bg-neutral-400 ${hasNewIncident ? 'flash-marker' : ''}`;
         }
       }
 
@@ -621,7 +647,7 @@ export function IncidentMap({
         : firstIncident.traffic_report_id;
       markers.current.set(markerId, marker);
     });
-  }, [incidents, selectedIncident, onIncidentSelect, mapLoaded, resolvedTheme, userLocation]);
+  }, [incidents, selectedIncident, onIncidentSelect, mapLoaded, resolvedTheme, userLocation, stableNewIncidentIds]);
 
   useEffect(() => {
     if (!map.current || !selectedIncident) return;
