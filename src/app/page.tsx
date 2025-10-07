@@ -9,8 +9,11 @@ import {
 import { IncidentMap } from "@/components/IncidentMap";
 import { IncidentsList } from "@/components/IncidentsList";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { SettingsDialog } from "@/components/SettingsDialog";
+import { CallBanner } from "@/components/CallBanner";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { useFireIncidents } from "@/lib/api";
+import { useSettings } from "@/lib/settings";
 import { FireIncident } from "@/types/incident";
 import { toast } from "sonner";
 
@@ -26,11 +29,15 @@ export default function Home() {
     fetchInitial,
     resetStorage,
   } = useFireIncidents();
+  const { settings } = useSettings();
   const [selectedIncident, setSelectedIncident] = useState<FireIncident | null>(
     null
   );
   const [displayedIncidents, setDisplayedIncidents] = useState<FireIncident[]>(
     []
+  );
+  const [bannerIncident, setBannerIncident] = useState<FireIncident | null>(
+    null
   );
 
   const handleDisplayedIncidentsChange = useCallback(
@@ -38,6 +45,15 @@ export default function Home() {
       setDisplayedIncidents(incidents);
     },
     []
+  );
+
+  const handleNewIncident = useCallback(
+    (incident: FireIncident) => {
+      if (settings.showBanner) {
+        setBannerIncident(incident);
+      }
+    },
+    [settings.showBanner]
   );
 
   useEffect(() => {
@@ -60,6 +76,10 @@ export default function Home() {
 
   return (
     <div className="h-screen flex flex-col">
+      <CallBanner
+        incident={bannerIncident}
+        onComplete={() => setBannerIncident(null)}
+      />
       <header className="border-b px-6 py-4">
         <div className="flex items-center justify-between">
           <div>
@@ -68,7 +88,10 @@ export default function Home() {
               Real-time Austin Fire Department incidents with unit tracking
             </p>
           </div>
-          <ThemeToggle />
+          <div className="flex items-center gap-2">
+            <SettingsDialog />
+            <ThemeToggle />
+          </div>
         </div>
       </header>
 
@@ -79,6 +102,7 @@ export default function Home() {
             selectedIncident={selectedIncident}
             onIncidentSelect={setSelectedIncident}
             onDisplayedIncidentsChange={handleDisplayedIncidentsChange}
+            onNewIncident={handleNewIncident}
             lastUpdated={lastUpdated}
             onRefresh={refetch}
             onFetchInitial={fetchInitial}

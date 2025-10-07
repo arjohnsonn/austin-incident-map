@@ -3,6 +3,7 @@
 import { useState, useMemo, memo, useRef, useEffect, useCallback } from "react";
 import { format } from "date-fns";
 import { Search, Calendar, RefreshCw, Play, Pause, Trash2, Volume2 } from "lucide-react";
+import { useSettings } from "@/lib/settings";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -36,6 +37,7 @@ interface IncidentsListProps {
   selectedIncident: FireIncident | null;
   onIncidentSelect: (incident: FireIncident) => void;
   onDisplayedIncidentsChange?: (incidents: FireIncident[]) => void;
+  onNewIncident?: (incident: FireIncident) => void;
   loading?: boolean;
   lastUpdated?: Date | null;
   onRefresh?: () => void;
@@ -51,10 +53,14 @@ const VirtualizedList = memo(
     incidents,
     selectedIncident,
     onIncidentSelect,
+    autoPlayAudio,
+    onNewIncident,
   }: {
     incidents: FireIncident[];
     selectedIncident: FireIncident | null;
     onIncidentSelect: (incident: FireIncident) => void;
+    autoPlayAudio: boolean;
+    onNewIncident?: (incident: FireIncident) => void;
   }) => {
     const [scrollTop, setScrollTop] = useState(0);
     const [containerHeight, setContainerHeight] = useState(600);
@@ -190,6 +196,33 @@ const VirtualizedList = memo(
       if (newIds.size > 0) {
         setNewIncidentIds(newIds);
 
+        const newIncidentsArray = incidents.filter(inc => newIds.has(inc.traffic_report_id));
+
+        if (newIncidentsArray.length > 0) {
+          const firstNewIncident = newIncidentsArray[0];
+
+          if (onNewIncident) {
+            onNewIncident(firstNewIncident);
+          }
+
+          if (autoPlayAudio && firstNewIncident.audioUrl) {
+            if (audioRef.current) {
+              audioRef.current.pause();
+            }
+
+            audioRef.current = new Audio(firstNewIncident.audioUrl);
+            audioRef.current.play().catch((error) => {
+              console.error('Auto-play failed:', error);
+              console.log('Browser blocked auto-play. User interaction required.');
+            });
+            setPlayingAudioId(firstNewIncident.traffic_report_id);
+
+            audioRef.current.onended = () => {
+              setPlayingAudioId(null);
+            };
+          }
+        }
+
         const timer = setTimeout(() => {
           setNewIncidentIds(new Set());
         }, 3000);
@@ -199,7 +232,7 @@ const VirtualizedList = memo(
       }
 
       prevIncidentIdsRef.current = currentIds;
-    }, [incidents]);
+    }, [incidents, autoPlayAudio, onNewIncident]);
 
 
     const startIndex = Math.max(
@@ -435,12 +468,14 @@ export function IncidentsList({
   selectedIncident,
   onIncidentSelect,
   onDisplayedIncidentsChange,
+  onNewIncident,
   loading,
   lastUpdated,
   onRefresh,
   onFetchInitial,
   onResetStorage,
 }: IncidentsListProps) {
+  const { settings } = useSettings();
   const [filters, setFilters] = useState<FilterState>({
     search: "",
     status: "ACTIVE",
@@ -811,6 +846,8 @@ export function IncidentsList({
             incidents={displayedIncidents}
             selectedIncident={selectedIncident}
             onIncidentSelect={onIncidentSelect}
+            autoPlayAudio={settings.autoPlayAudio}
+            onNewIncident={onNewIncident}
           />
         )}
       </div>

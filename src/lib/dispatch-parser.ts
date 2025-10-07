@@ -33,6 +33,7 @@ function preprocessTranscript(transcript: string): string {
   processed = processed.replace(/\bASD\b/gi, 'AFD');
   processed = processed.replace(/\bAFV\b/gi, 'AFD');
   processed = processed.replace(/\bQuinn\s+(\d+)\b/gi, 'Quint $1');
+  processed = processed.replace(/\bWAD\s+(\d+)\b/gi, 'Squad $1');
   processed = processed.replace(/\bthree\s+down\b/gi, 'Tree Down');
   processed = processed.replace(/\b3\s+down\b/gi, 'Tree Down');
   processed = processed.replace(/\bpower\s+lines?\s+down\b/gi, 'powerline down');
