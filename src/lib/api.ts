@@ -231,6 +231,42 @@ export function useFireIncidents() {
           new Map(allIncidents.map(inc => [inc.traffic_report_id, inc])).values()
         );
 
+        console.log('\n--- UNIT DEDUPLICATION ACROSS ALL INCIDENTS ---');
+        const sortedByTime = [...dedupById].sort((a, b) =>
+          new Date(b.published_date).getTime() - new Date(a.published_date).getTime()
+        );
+
+        const assignedUnits = new Set<string>();
+        const afterUnitDedup: FireIncident[] = [];
+
+        for (const incident of sortedByTime) {
+          if (!incident.units || incident.units.length === 0) {
+            afterUnitDedup.push(incident);
+            continue;
+          }
+
+          const availableUnits = incident.units.filter(unit => !assignedUnits.has(unit));
+
+          if (availableUnits.length === 0) {
+            console.log(`  → Removing incident ${incident.traffic_report_id} at ${incident.address} (all units reassigned to newer calls)`);
+            continue;
+          }
+
+          if (availableUnits.length < incident.units.length) {
+            const removedUnits = incident.units.filter(unit => assignedUnits.has(unit));
+            console.log(`  → Removed units ${removedUnits.join(', ')} from ${incident.traffic_report_id} (reassigned to newer calls)`);
+          }
+
+          afterUnitDedup.push({
+            ...incident,
+            units: availableUnits,
+          });
+
+          availableUnits.forEach(unit => assignedUnits.add(unit));
+        }
+
+        console.log(`Unit deduplication: ${dedupById.length} → ${afterUnitDedup.length} incidents`);
+
         const normalizeCallType = (callType: string) => {
           return callType.toLowerCase().replace(/[^a-z0-9]/g, '');
         };
@@ -238,7 +274,7 @@ export function useFireIncidents() {
         const seenByCallType = new Map<string, FireIncident[]>();
         const finalDeduped: FireIncident[] = [];
 
-        for (const incident of dedupById) {
+        for (const incident of afterUnitDedup) {
           const normalizedCallType = normalizeCallType(incident.issue_reported);
 
           if (!seenByCallType.has(normalizedCallType)) {
@@ -290,7 +326,7 @@ export function useFireIncidents() {
           }
         }
 
-        console.log('After deduplication:', finalDeduped.length, 'incidents');
+        console.log('After address+callType deduplication:', finalDeduped.length, 'incidents');
         console.log('Final incident IDs:', finalDeduped.map(i => i.traffic_report_id));
         console.log('=== FETCH END ===\n');
 
