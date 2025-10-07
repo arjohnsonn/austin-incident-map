@@ -483,30 +483,65 @@ export function IncidentMap({
       } else {
         const incident = firstIncident;
         const isActive = incident.traffic_report_status === "ACTIVE";
+        const formatDate = (dateString: string) => {
+          try {
+            const date = new Date(dateString);
+            return date.toLocaleString('en-US', {
+              month: '2-digit',
+              day: '2-digit',
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: false
+            });
+          } catch {
+            return "Invalid date";
+          }
+        };
+
+        const hasAudio = !!incident.audioUrl;
+        const units = incident.units && incident.units.length > 0
+          ? incident.units.join(', ')
+          : '-';
+        const channels = incident.channels && incident.channels.length > 0
+          ? incident.channels.join(', ')
+          : '-';
 
         popupContent = `
           <div style="background: ${bgColor}; color: ${textColor}; padding: 12px; border-radius: 8px; border: 1px solid ${
           isDark ? "#374151" : "#e5e7eb"
-        };">
-            <div style="font-weight: 600; font-size: 14px; margin-bottom: 4px; color: ${textColor};">${
-          incident.issue_reported
-        }</div>
-            <div style="font-size: 12px; color: ${neutralTextColor}; margin-bottom: 8px;">${
-          incident.address
-        }</div>
-            <div style="font-size: 12px; margin-bottom: 8px;">
-              <span style="display: inline-block; padding: 4px 8px; border-radius: 9999px; font-size: 12px; ${
-                isActive
-                  ? "background: #fef2f2; color: #991b1b;"
-                  : `background: ${isDark ? "#374151" : "#f3f4f6"}; color: ${
-                      isDark ? "#d1d5db" : "#374151"
-                    };`
-              }">
-                ${incident.traffic_report_status}
-              </span>
-            </div>
-            <div style="font-size: 12px; color: ${neutralTextColor};">
-              ${new Date(incident.published_date).toLocaleString()}
+        }; min-width: 280px;">
+            <div style="display: grid; grid-template-columns: auto 1fr; gap: 8px; font-size: 12px;">
+              ${hasAudio ? `
+                <div style="display: flex; align-items: center; justify-content: center; color: ${neutralTextColor};">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M8 5v14l11-7z"/>
+                  </svg>
+                </div>
+              ` : '<div style="width: 12px;"></div>'}
+
+              <div style="color: ${neutralTextColor}; font-family: monospace;">
+                ${formatDate(incident.published_date)}
+              </div>
+
+              <div></div>
+              <div style="font-weight: 600; color: ${textColor};">
+                ${incident.issue_reported}
+              </div>
+
+              <div></div>
+              <div style="color: ${neutralTextColor};">
+                ${incident.address || '?'}
+              </div>
+
+              <div></div>
+              <div style="color: #3b82f6; font-size: 11px;">
+                <strong>Units:</strong> ${units}
+              </div>
+
+              <div></div>
+              <div style="color: #a855f7; font-size: 11px;">
+                <strong>Channels:</strong> ${channels}
+              </div>
             </div>
           </div>
         `;
