@@ -6,9 +6,10 @@ import { FireIncident } from '@/types/incident';
 interface CallBannerProps {
   incident: FireIncident | null;
   onComplete: () => void;
+  isAudioPlaying: boolean;
 }
 
-export function CallBanner({ incident, onComplete }: CallBannerProps) {
+export function CallBanner({ incident, onComplete, isAudioPlaying }: CallBannerProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [cycleCount, setCycleCount] = useState(0);
 
@@ -32,7 +33,7 @@ export function CallBanner({ incident, onComplete }: CallBannerProps) {
         if (next >= items.length) {
           setCycleCount((count) => {
             const newCount = count + 1;
-            if (newCount >= 3) {
+            if (newCount >= 3 && !isAudioPlaying) {
               setTimeout(() => {
                 onComplete();
               }, 3000);
@@ -46,9 +47,15 @@ export function CallBanner({ incident, onComplete }: CallBannerProps) {
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [incident, onComplete]);
+  }, [incident, onComplete, isAudioPlaying]);
 
-  if (!incident || cycleCount >= 3) return null;
+  useEffect(() => {
+    if (!isAudioPlaying && cycleCount >= 3 && incident) {
+      onComplete();
+    }
+  }, [isAudioPlaying, cycleCount, incident, onComplete]);
+
+  if (!incident || (cycleCount >= 3 && !isAudioPlaying)) return null;
 
   const items = [
     { label: 'CALL TYPE', value: incident.issue_reported || 'Unknown Call Type' },

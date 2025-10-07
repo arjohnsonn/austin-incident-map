@@ -38,6 +38,7 @@ interface IncidentsListProps {
   onIncidentSelect: (incident: FireIncident) => void;
   onDisplayedIncidentsChange?: (incidents: FireIncident[]) => void;
   onNewIncident?: (incident: FireIncident) => void;
+  onAudioStateChange?: (playing: boolean) => void;
   loading?: boolean;
   lastUpdated?: Date | null;
   onRefresh?: () => void;
@@ -55,12 +56,14 @@ const VirtualizedList = memo(
     onIncidentSelect,
     autoPlayAudio,
     onNewIncident,
+    onAudioStateChange,
   }: {
     incidents: FireIncident[];
     selectedIncident: FireIncident | null;
     onIncidentSelect: (incident: FireIncident) => void;
     autoPlayAudio: boolean;
     onNewIncident?: (incident: FireIncident) => void;
+    onAudioStateChange?: (playing: boolean) => void;
   }) => {
     const [scrollTop, setScrollTop] = useState(0);
     const [containerHeight, setContainerHeight] = useState(600);
@@ -153,6 +156,7 @@ const VirtualizedList = memo(
       if (playingAudioId === incident.traffic_report_id) {
         audioRef.current?.pause();
         setPlayingAudioId(null);
+        onAudioStateChange?.(false);
       } else {
         if (audioRef.current) {
           audioRef.current.pause();
@@ -161,20 +165,23 @@ const VirtualizedList = memo(
         audioRef.current = new Audio(incident.audioUrl);
         audioRef.current.play();
         setPlayingAudioId(incident.traffic_report_id);
+        onAudioStateChange?.(true);
 
         audioRef.current.onended = () => {
           setPlayingAudioId(null);
+          onAudioStateChange?.(false);
         };
       }
-    }, [playingAudioId]);
+    }, [playingAudioId, onAudioStateChange]);
 
     useEffect(() => {
       return () => {
         if (audioRef.current) {
           audioRef.current.pause();
+          onAudioStateChange?.(false);
         }
       };
-    }, []);
+    }, [onAudioStateChange]);
 
     useEffect(() => {
       const currentIds = new Set(incidents.map(inc => inc.traffic_report_id));
@@ -211,7 +218,9 @@ const VirtualizedList = memo(
             }
 
             audioRef.current = new Audio(firstNewIncident.audioUrl);
-            audioRef.current.play().catch((error) => {
+            audioRef.current.play().then(() => {
+              onAudioStateChange?.(true);
+            }).catch((error) => {
               console.error('Auto-play failed:', error);
               console.log('Browser blocked auto-play. User interaction required.');
             });
@@ -219,6 +228,7 @@ const VirtualizedList = memo(
 
             audioRef.current.onended = () => {
               setPlayingAudioId(null);
+              onAudioStateChange?.(false);
             };
           }
         }
@@ -232,7 +242,7 @@ const VirtualizedList = memo(
       }
 
       prevIncidentIdsRef.current = currentIds;
-    }, [incidents, autoPlayAudio, onNewIncident]);
+    }, [incidents, autoPlayAudio, onNewIncident, onAudioStateChange]);
 
 
     const startIndex = Math.max(
@@ -469,6 +479,7 @@ export function IncidentsList({
   onIncidentSelect,
   onDisplayedIncidentsChange,
   onNewIncident,
+  onAudioStateChange,
   loading,
   lastUpdated,
   onRefresh,
@@ -848,6 +859,7 @@ export function IncidentsList({
             onIncidentSelect={onIncidentSelect}
             autoPlayAudio={settings.autoPlayAudio}
             onNewIncident={onNewIncident}
+            onAudioStateChange={onAudioStateChange}
           />
         )}
       </div>

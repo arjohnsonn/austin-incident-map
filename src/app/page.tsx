@@ -39,6 +39,7 @@ export default function Home() {
   const [bannerIncident, setBannerIncident] = useState<FireIncident | null>(
     null
   );
+  const [isAudioPlaying, setIsAudioPlaying] = useState(false);
 
   const handleDisplayedIncidentsChange = useCallback(
     (incidents: FireIncident[]) => {
@@ -55,6 +56,10 @@ export default function Home() {
     },
     [settings.showBanner]
   );
+
+  const handleAudioStateChange = useCallback((playing: boolean) => {
+    setIsAudioPlaying(playing);
+  }, []);
 
   useEffect(() => {
     if (isManualRefresh && lastUpdated) {
@@ -79,6 +84,7 @@ export default function Home() {
       <CallBanner
         incident={bannerIncident}
         onComplete={() => setBannerIncident(null)}
+        isAudioPlaying={isAudioPlaying}
       />
       <header className="border-b px-6 py-4">
         <div className="flex items-center justify-between">
@@ -103,6 +109,7 @@ export default function Home() {
             onIncidentSelect={setSelectedIncident}
             onDisplayedIncidentsChange={handleDisplayedIncidentsChange}
             onNewIncident={handleNewIncident}
+            onAudioStateChange={handleAudioStateChange}
             lastUpdated={lastUpdated}
             onRefresh={refetch}
             onFetchInitial={fetchInitial}
