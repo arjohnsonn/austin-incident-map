@@ -24,6 +24,8 @@ export default function Home() {
     lastUpdated,
     isManualRefresh,
     isLoading,
+    processingState,
+    isInitialStream,
     refetch,
     setPosition,
     fetchInitial,
@@ -100,10 +102,6 @@ export default function Home() {
     }
   }, [isManualRefresh, lastUpdated]);
 
-  if (isLoading) {
-    return <LoadingScreen />;
-  }
-
   if (error) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -146,7 +144,10 @@ export default function Home() {
             onDisplayedIncidentsChange={handleDisplayedIncidentsChange}
             onNewIncident={handleNewIncident}
             onAudioStateChange={handleAudioStateChange}
+            loading={isLoading}
             lastUpdated={lastUpdated}
+            processingState={processingState}
+            isInitialStream={isInitialStream}
             onRefresh={refetch}
             onFetchInitial={fetchInitial}
             onResetStorage={resetStorage}

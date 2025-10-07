@@ -27,6 +27,88 @@ interface BroadcastifyResponse {
 const FIRE_API_ENDPOINT = 'https://data.austintexas.gov/resource/wpu4-x69d.json?$order=published_date DESC&$limit=1000';
 const TRAFFIC_API_ENDPOINT = 'https://data.austintexas.gov/resource/dx9v-zd7x.json?$order=published_date DESC&$limit=1000';
 
+interface StreamingCallbacks {
+  onProgress?: (completed: number, total: number) => void;
+  onIncident?: (incident: FireIncident) => void;
+  onComplete?: (summary: { processed: number; skipped: number }) => void;
+}
+
+async function fetchBroadcastifyLiveCallsStreaming(
+  lastPos: number | undefined,
+  init: boolean,
+  callbacks: StreamingCallbacks
+): Promise<{ incidents: FireIncident[]; lastPos: number }> {
+  return new Promise((resolve, reject) => {
+    let url = '/api/broadcastify/live-calls?stream=1';
+    if (init) {
+      url += '&init=1';
+    } else if (lastPos && lastPos > 0) {
+      url += `&pos=${lastPos}`;
+    } else {
+      url += '&init=1';
+    }
+
+    const eventSource = new EventSource(url);
+    const incidents: FireIncident[] = [];
+    let finalLastPos = lastPos || 0;
+    let totalCalls = 0;
+
+    eventSource.addEventListener('metadata', (e) => {
+      const data = JSON.parse(e.data);
+      finalLastPos = data.lastPos;
+      totalCalls = data.totalCalls;
+      console.log(`Streaming: ${totalCalls} calls to process`);
+    });
+
+    eventSource.addEventListener('progress', (e) => {
+      const data = JSON.parse(e.data);
+      callbacks.onProgress?.(data.completed, data.total);
+    });
+
+    eventSource.addEventListener('incident', (e) => {
+      const dispatchIncident = JSON.parse(e.data);
+      const timestamp = typeof dispatchIncident.timestamp === 'string'
+        ? new Date(dispatchIncident.timestamp)
+        : dispatchIncident.timestamp;
+
+      const incident: FireIncident = {
+        traffic_report_id: dispatchIncident.id,
+        published_date: timestamp.toISOString(),
+        issue_reported: dispatchIncident.callType,
+        location: dispatchIncident.location,
+        latitude: dispatchIncident.location?.coordinates?.[1]?.toString() || '0',
+        longitude: dispatchIncident.location?.coordinates?.[0]?.toString() || '0',
+        address: dispatchIncident.address,
+        traffic_report_status: 'ACTIVE' as const,
+        traffic_report_status_date_time: timestamp.toISOString(),
+        agency: 'Austin Fire Department',
+        incidentType: dispatchIncident.incidentType,
+        units: dispatchIncident.units,
+        channels: dispatchIncident.channels,
+        audioUrl: dispatchIncident.audioUrl,
+        rawTranscript: dispatchIncident.rawTranscript,
+        estimatedResolutionMinutes: dispatchIncident.estimatedResolutionMinutes,
+      };
+
+      incidents.push(incident);
+      callbacks.onIncident?.(incident);
+    });
+
+    eventSource.addEventListener('complete', (e) => {
+      const data = JSON.parse(e.data);
+      callbacks.onComplete?.(data);
+      eventSource.close();
+      resolve({ incidents, lastPos: finalLastPos });
+    });
+
+    eventSource.onerror = (error) => {
+      console.error('EventSource error:', error);
+      eventSource.close();
+      reject(new Error('Streaming connection failed'));
+    };
+  });
+}
+
 async function fetchBroadcastifyLiveCalls(lastPos?: number, init?: boolean): Promise<{ incidents: FireIncident[]; lastPos: number }> {
   try {
     let url = '/api/broadcastify/live-calls';
@@ -144,6 +226,11 @@ export function useFireIncidents() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [isManualRefresh, setIsManualRefresh] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [processingState, setProcessingState] = useState<{
+    total: number;
+    completed: number;
+  } | null>(null);
+  const [isInitialStream, setIsInitialStream] = useState(true);
   const lastPosRef = useRef<number>(0);
   const dispatchIncidentsRef = useRef<FireIncident[]>([]);
   const isInitializedRef = useRef(false);
@@ -162,15 +249,129 @@ export function useFireIncidents() {
         setIsManualRefresh(true);
       }
 
-      console.log('=== FETCH START ===');
+      console.log('=== FETCH START (STREAMING) ===');
       console.log('Current lastPos:', lastPosRef.current, new Date(lastPosRef.current * 1000).toISOString());
       console.log('Incidents in memory before fetch:', dispatchIncidentsRef.current.length);
       console.log('Using init:', useInit);
 
-      const broadcastifyData = await fetchBroadcastifyLiveCalls(
+      const streamingIncidents: FireIncident[] = [];
+
+      const broadcastifyData = await fetchBroadcastifyLiveCallsStreaming(
         useInit ? undefined : lastPosRef.current,
-        useInit
+        useInit,
+        {
+          onProgress: (completed, total) => {
+            setProcessingState({ completed, total });
+          },
+          onIncident: (incident) => {
+            streamingIncidents.push(incident);
+
+            setIncidents(prev => {
+              const allIncidents = [incident, ...dispatchIncidentsRef.current, ...prev];
+
+              const dedupById = Array.from(
+                new Map(allIncidents.map(inc => [inc.traffic_report_id, inc])).values()
+              );
+
+              console.log('\n--- STREAMING INCIDENT DEDUPLICATION ---');
+              const sortedByTime = [...dedupById].sort((a, b) =>
+                new Date(b.published_date).getTime() - new Date(a.published_date).getTime()
+              );
+
+              const assignedUnits = new Set<string>();
+              const afterUnitDedup: FireIncident[] = [];
+
+              for (const inc of sortedByTime) {
+                if (!inc.units || inc.units.length === 0) {
+                  afterUnitDedup.push(inc);
+                  continue;
+                }
+
+                const availableUnits = inc.units.filter(unit => !assignedUnits.has(unit));
+
+                if (availableUnits.length === 0) {
+                  continue;
+                }
+
+                afterUnitDedup.push({
+                  ...inc,
+                  units: availableUnits,
+                });
+
+                availableUnits.forEach(unit => assignedUnits.add(unit));
+              }
+
+              const normalizeCallType = (callType: string) => {
+                return callType.toLowerCase().replace(/[^a-z0-9]/g, '');
+              };
+
+              const seenByCallType = new Map<string, FireIncident[]>();
+              const finalDeduped: FireIncident[] = [];
+
+              for (const inc of afterUnitDedup) {
+                const normalizedCallType = normalizeCallType(inc.issue_reported);
+
+                if (!seenByCallType.has(normalizedCallType)) {
+                  seenByCallType.set(normalizedCallType, []);
+                }
+                seenByCallType.get(normalizedCallType)!.push(inc);
+              }
+
+              for (const [, incs] of seenByCallType.entries()) {
+                const incidentsWithAddress = incs.filter(inc => inc.address && inc.address !== '?');
+                const incidentsWithoutAddress = incs.filter(inc => !inc.address || inc.address === '?');
+
+                const grouped = new Map<string, FireIncident[]>();
+
+                for (const inc of incidentsWithAddress) {
+                  const normalizedAddress = inc.address.trim().toLowerCase();
+                  if (!grouped.has(normalizedAddress)) {
+                    grouped.set(normalizedAddress, []);
+                  }
+                  grouped.get(normalizedAddress)!.push(inc);
+                }
+
+                for (const [, addressIncidents] of grouped.entries()) {
+                  const sorted = addressIncidents.sort((a, b) =>
+                    new Date(b.published_date).getTime() - new Date(a.published_date).getTime()
+                  );
+                  finalDeduped.push(sorted[0]);
+                }
+
+                if (incidentsWithoutAddress.length > 0) {
+                  const allUnitsInAddressedIncidents = new Set<string>();
+                  for (const inc of incidentsWithAddress) {
+                    if (inc.units) {
+                      inc.units.forEach(unit => allUnitsInAddressedIncidents.add(unit));
+                    }
+                  }
+
+                  for (const inc of incidentsWithoutAddress) {
+                    if (!inc.units || inc.units.length === 0) {
+                      continue;
+                    }
+
+                    const hasUniqueUnits = inc.units.some(unit => !allUnitsInAddressedIncidents.has(unit));
+
+                    if (hasUniqueUnits) {
+                      finalDeduped.push(inc);
+                    }
+                  }
+                }
+              }
+
+              console.log(`Streaming dedup: ${dedupById.length} → ${finalDeduped.length} incidents`);
+              return finalDeduped;
+            });
+          },
+          onComplete: (summary) => {
+            console.log('Streaming complete:', summary);
+            setProcessingState(null);
+            setIsInitialStream(false);
+          },
+        }
       );
+
       console.log('Broadcastify data received:', {
         lastPos: broadcastifyData.lastPos,
         lastPosDate: new Date(broadcastifyData.lastPos * 1000).toISOString(),
@@ -181,296 +382,26 @@ export function useFireIncidents() {
       lastPosRef.current = broadcastifyData.lastPos;
 
       if (useInit) {
-        console.log('Using init - replacing all incidents in memory');
-        dispatchIncidentsRef.current = broadcastifyData.incidents;
-        console.log('Memory replaced with:', dispatchIncidentsRef.current.length, 'incidents');
-      } else if (broadcastifyData.incidents.length > 0) {
-        console.log('Adding new dispatch incidents:', broadcastifyData.incidents.length);
-
+        console.log('Using init - replaced all incidents via streaming');
+        dispatchIncidentsRef.current = streamingIncidents;
+      } else {
         const existingIds = new Set(
           dispatchIncidentsRef.current.map(inc => inc.traffic_report_id)
         );
-
-        console.log('Existing IDs in memory:', Array.from(existingIds));
-
-        const newIncidents = broadcastifyData.incidents.filter(
+        const newIncidents = streamingIncidents.filter(
           inc => !existingIds.has(inc.traffic_report_id)
         );
-
-        console.log('New unique incidents:', newIncidents.length);
-        console.log('New incident IDs:', newIncidents.map(i => i.traffic_report_id));
-
         dispatchIncidentsRef.current = [
           ...newIncidents,
           ...dispatchIncidentsRef.current.slice(0, 50),
         ];
-
-        console.log('Memory after adding:', dispatchIncidentsRef.current.length, 'incidents');
-      } else {
-        console.log('No new incidents from API');
       }
-
-      console.log('Total dispatch incidents in memory:', dispatchIncidentsRef.current.length);
-      console.log('All IDs in memory:', dispatchIncidentsRef.current.map(i => i.traffic_report_id));
 
       localStorage.setItem(CACHE_KEY_INCIDENTS, JSON.stringify(dispatchIncidentsRef.current));
       localStorage.setItem(CACHE_KEY_LASTPOS, lastPosRef.current.toString());
 
-      // TEMPORARILY DISABLED - only showing Broadcastify dispatch calls
-      // const standardIncidents = await fetchFireIncidents();
-      // const newData = [...standardIncidents, ...dispatchIncidentsRef.current];
-
-      setIncidents(prevIncidents => {
-        console.log('Setting state - previous incidents:', prevIncidents.length);
-        console.log('Previous incident IDs:', prevIncidents.map(i => i.traffic_report_id));
-
-        const allIncidents = [...dispatchIncidentsRef.current, ...prevIncidents];
-        console.log('Combined before dedup:', allIncidents.length);
-
-        const dedupById = Array.from(
-          new Map(allIncidents.map(inc => [inc.traffic_report_id, inc])).values()
-        );
-
-        console.log('\n--- UNIT DEDUPLICATION ACROSS ALL INCIDENTS ---');
-        const sortedByTime = [...dedupById].sort((a, b) =>
-          new Date(b.published_date).getTime() - new Date(a.published_date).getTime()
-        );
-
-        const assignedUnits = new Set<string>();
-        const afterUnitDedup: FireIncident[] = [];
-
-        for (const incident of sortedByTime) {
-          if (!incident.units || incident.units.length === 0) {
-            afterUnitDedup.push(incident);
-            continue;
-          }
-
-          const availableUnits = incident.units.filter(unit => !assignedUnits.has(unit));
-
-          if (availableUnits.length === 0) {
-            console.log(`  → Removing incident ${incident.traffic_report_id} at ${incident.address} (all units reassigned to newer calls)`);
-            continue;
-          }
-
-          if (availableUnits.length < incident.units.length) {
-            const removedUnits = incident.units.filter(unit => assignedUnits.has(unit));
-            console.log(`  → Removed units ${removedUnits.join(', ')} from ${incident.traffic_report_id} (reassigned to newer calls)`);
-          }
-
-          afterUnitDedup.push({
-            ...incident,
-            units: availableUnits,
-          });
-
-          availableUnits.forEach(unit => assignedUnits.add(unit));
-        }
-
-        console.log(`Unit deduplication: ${dedupById.length} → ${afterUnitDedup.length} incidents`);
-
-        const normalizeCallType = (callType: string) => {
-          return callType.toLowerCase().replace(/[^a-z0-9]/g, '');
-        };
-
-        const seenByCallType = new Map<string, FireIncident[]>();
-        const finalDeduped: FireIncident[] = [];
-
-        for (const incident of afterUnitDedup) {
-          const normalizedCallType = normalizeCallType(incident.issue_reported);
-
-          if (!seenByCallType.has(normalizedCallType)) {
-            seenByCallType.set(normalizedCallType, []);
-          }
-          seenByCallType.get(normalizedCallType)!.push(incident);
-        }
-
-        for (const [, incidents] of seenByCallType.entries()) {
-          const incidentsWithAddress = incidents.filter(inc => inc.address && inc.address !== '?');
-          const incidentsWithoutAddress = incidents.filter(inc => !inc.address || inc.address === '?');
-
-          const grouped = new Map<string, FireIncident[]>();
-
-          for (const incident of incidentsWithAddress) {
-            const normalizedAddress = incident.address.trim().toLowerCase();
-            if (!grouped.has(normalizedAddress)) {
-              grouped.set(normalizedAddress, []);
-            }
-            grouped.get(normalizedAddress)!.push(incident);
-          }
-
-          for (const [address, addressIncidents] of grouped.entries()) {
-            const sorted = addressIncidents.sort((a, b) =>
-              new Date(b.published_date).getTime() - new Date(a.published_date).getTime()
-            );
-            finalDeduped.push(sorted[0]);
-          }
-
-          if (incidentsWithoutAddress.length > 0) {
-            const allUnitsInAddressedIncidents = new Set<string>();
-            for (const incident of incidentsWithAddress) {
-              if (incident.units) {
-                incident.units.forEach(unit => allUnitsInAddressedIncidents.add(unit));
-              }
-            }
-
-            for (const incident of incidentsWithoutAddress) {
-              if (!incident.units || incident.units.length === 0) {
-                continue;
-              }
-
-              const hasUniqueUnits = incident.units.some(unit => !allUnitsInAddressedIncidents.has(unit));
-
-              if (hasUniqueUnits) {
-                finalDeduped.push(incident);
-              }
-            }
-          }
-        }
-
-        console.log('After address+callType deduplication:', finalDeduped.length, 'incidents');
-
-        console.log('\n--- MERGING RELATED INCIDENTS WITH PARTIAL INFORMATION ---');
-        const TIME_WINDOW_MS = 5 * 60 * 1000;
-
-        const normalizeAddress = (addr: string | undefined): string => {
-          if (!addr || addr === '?') return '';
-          return addr
-            .toLowerCase()
-            .replace(/\s+/g, '')
-            .replace(/[^a-z0-9]/g, '');
-        };
-
-        const addressesSimilar = (addr1: string | undefined, addr2: string | undefined): boolean => {
-          if (!addr1 || !addr2 || addr1 === '?' || addr2 === '?') return false;
-
-          const norm1 = normalizeAddress(addr1);
-          const norm2 = normalizeAddress(addr2);
-
-          if (norm1 === norm2) return true;
-
-          if (norm1.includes(norm2) || norm2.includes(norm1)) {
-            return true;
-          }
-
-          const extractNumbers = (s: string) => s.match(/\d+/g) || [];
-          const nums1 = extractNumbers(norm1);
-          const nums2 = extractNumbers(norm2);
-
-          if (nums1.length > 0 && nums2.length > 0 && nums1[0] === nums2[0]) {
-            const baseAddr1 = norm1.replace(/^\d+/, '');
-            const baseAddr2 = norm2.replace(/^\d+/, '');
-
-            if (baseAddr1.includes(baseAddr2) || baseAddr2.includes(baseAddr1)) {
-              return true;
-            }
-
-            if (baseAddr1 === baseAddr2) return true;
-          }
-
-          const extractMainStreet = (s: string) => {
-            const lower = s.toLowerCase();
-            const words = lower.match(/\b[a-z]+\b/g) || [];
-            const mainWords = words.slice(0, 2);
-            return mainWords.join('');
-          };
-
-          const mainStreet1 = extractMainStreet(addr1);
-          const mainStreet2 = extractMainStreet(addr2);
-
-          if (mainStreet1.length >= 6 && mainStreet2.length >= 6 && mainStreet1 === mainStreet2) {
-            return true;
-          }
-
-          return false;
-        };
-
-        for (let i = 0; i < finalDeduped.length; i++) {
-          const incident = finalDeduped[i];
-          const hasValidCallType = incident.issue_reported && incident.issue_reported !== '?' && incident.issue_reported !== '-';
-          const hasValidAddress = incident.address && incident.address !== '?';
-          const hasCoordinates = !!(incident.location && incident.location.coordinates && incident.location.coordinates[0] !== 0);
-
-          for (let j = i + 1; j < finalDeduped.length; j++) {
-            const other = finalDeduped[j];
-            const otherHasValidCallType = other.issue_reported && other.issue_reported !== '?' && other.issue_reported !== '-';
-            const otherHasValidAddress = other.address && other.address !== '?';
-            const otherHasCoordinates = !!(other.location && other.location.coordinates && other.location.coordinates[0] !== 0);
-
-            const timeDiff = Math.abs(
-              new Date(incident.published_date).getTime() - new Date(other.published_date).getTime()
-            );
-
-            if (timeDiff > TIME_WINDOW_MS) continue;
-
-            const hasOverlappingUnits = incident.units && other.units &&
-              incident.units.some(unit => other.units?.includes(unit));
-
-            const similarAddresses = addressesSimilar(incident.address, other.address);
-
-            const shouldMerge = (timeDiff < 120000 && hasOverlappingUnits) ||
-                               (timeDiff < 60000 && similarAddresses);
-
-            if (!shouldMerge) continue;
-
-            let targetIncident = incident;
-            let sourceIncident = other;
-            let targetIndex = i;
-            let sourceIndex = j;
-
-            if (otherHasCoordinates && !hasCoordinates) {
-              targetIncident = other;
-              sourceIncident = incident;
-              targetIndex = j;
-              sourceIndex = i;
-            }
-
-            if (!targetIncident.issue_reported || targetIncident.issue_reported === '?' || targetIncident.issue_reported === '-') {
-              if (sourceIncident.issue_reported && sourceIncident.issue_reported !== '?' && sourceIncident.issue_reported !== '-') {
-                console.log(`  → Merging callType "${sourceIncident.issue_reported}" from ${sourceIncident.traffic_report_id} into ${targetIncident.traffic_report_id}`);
-                targetIncident.issue_reported = sourceIncident.issue_reported;
-              }
-            }
-
-            if (!targetIncident.address || targetIncident.address === '?') {
-              if (sourceIncident.address && sourceIncident.address !== '?') {
-                console.log(`  → Merging address "${sourceIncident.address}" from ${sourceIncident.traffic_report_id} into ${targetIncident.traffic_report_id}`);
-                targetIncident.address = sourceIncident.address;
-              }
-            }
-
-            if (!targetIncident.location || !targetIncident.location.coordinates || targetIncident.location.coordinates[0] === 0) {
-              if (sourceIncident.location && sourceIncident.location.coordinates && sourceIncident.location.coordinates[0] !== 0) {
-                console.log(`  → Merging coordinates from ${sourceIncident.traffic_report_id} into ${targetIncident.traffic_report_id}`);
-                targetIncident.location = sourceIncident.location;
-                targetIncident.latitude = sourceIncident.latitude;
-                targetIncident.longitude = sourceIncident.longitude;
-              }
-            }
-
-            if (!targetIncident.units || targetIncident.units.length === 0) {
-              if (sourceIncident.units && sourceIncident.units.length > 0) {
-                targetIncident.units = sourceIncident.units;
-              }
-            } else if (sourceIncident.units && sourceIncident.units.length > 0) {
-              const combinedUnits = [...new Set([...targetIncident.units, ...sourceIncident.units])];
-              targetIncident.units = combinedUnits;
-            }
-
-            console.log(`  → Removing duplicate incident ${sourceIncident.traffic_report_id}`);
-            finalDeduped.splice(sourceIndex, 1);
-
-            if (sourceIndex < targetIndex) {
-              i--;
-            }
-            j--;
-          }
-        }
-
-        console.log(`After merging related incidents: ${finalDeduped.length} incidents`);
-        console.log('Final incident IDs:', finalDeduped.map(i => i.traffic_report_id));
-        console.log('=== FETCH END ===\n');
-
-        return finalDeduped;
-      });
+      console.log('Total dispatch incidents in memory:', dispatchIncidentsRef.current.length);
+      console.log('=== FETCH END ===\n');
 
       setLastUpdated(new Date());
       setIsLoading(false);
@@ -562,6 +493,7 @@ export function useFireIncidents() {
 
     setIncidents([]);
     setIsLoading(true);
+    setIsInitialStream(true);
 
     console.log('Storage cleared, re-initializing...');
 
@@ -571,5 +503,17 @@ export function useFireIncidents() {
     }, 100);
   }, [fetchData]);
 
-  return { incidents, error, lastUpdated, isManualRefresh, isLoading, refetch: manualRefetch, setPosition, fetchInitial, resetStorage };
+  return {
+    incidents,
+    error,
+    lastUpdated,
+    isManualRefresh,
+    isLoading,
+    processingState,
+    isInitialStream,
+    refetch: manualRefetch,
+    setPosition,
+    fetchInitial,
+    resetStorage
+  };
 }

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { generateBroadcastifyJWT, authenticateUser } from '@/lib/broadcastify-jwt';
-import { parseDispatchCallWithAI } from '@/lib/dispatch-parser';
+import { parseDispatchCallWithAI, quickEstimateResolution } from '@/lib/dispatch-parser';
 import { BroadcastifyLiveResponse, DispatchIncident } from '@/types/broadcastify';
 
 const BROADCASTIFY_LIVE_ENDPOINT = 'https://api.bcfy.io/calls/v1/live/';
@@ -220,7 +220,298 @@ async function transcribeAudio(audioUrl: string): Promise<string> {
   }
 }
 
+async function processCallWithTranscript(call: any, transcript: string): Promise<DispatchIncident | null> {
+  try {
+    const parsed = await parseDispatchCallWithAI(transcript);
+    const finalCallType = parsed.callType || '?';
+
+    let coordinates: [number, number] | null = null;
+    if (parsed.address && parsed.addressVariants.length > 0) {
+      coordinates = await geocodeAddress(parsed.addressVariants);
+    }
+
+    const incident: DispatchIncident = {
+      id: `${call.groupId}-${call.ts}-${call.start_ts}`,
+      callType: finalCallType,
+      units: parsed.units,
+      channels: parsed.channels,
+      address: parsed.address || '?',
+      location: coordinates ? {
+        type: 'Point',
+        coordinates,
+      } : undefined as any,
+      timestamp: new Date(call.ts * 1000),
+      audioUrl: call.url,
+      rawTranscript: transcript,
+      groupId: call.groupId,
+      duration: call.duration,
+      estimatedResolutionMinutes: parsed.estimatedResolutionMinutes,
+      incidentType: parsed.incidentType,
+    };
+
+    return incident;
+  } catch (error) {
+    console.error(`Error processing call:`, error);
+    return null;
+  }
+}
+
+function postProcessIncidents(incidents: DispatchIncident[]): {
+  deduplicated: DispatchIncident[];
+  reassignedCount: number;
+  duplicateCount: number;
+} {
+  const sorted = [...incidents].sort((a, b) =>
+    new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+  );
+
+  const assignedUnits = new Set<string>();
+  const afterUnitReassignment: DispatchIncident[] = [];
+
+  for (const incident of sorted) {
+    if (!incident.units || incident.units.length === 0) {
+      afterUnitReassignment.push(incident);
+      continue;
+    }
+
+    const availableUnits = incident.units.filter(unit => !assignedUnits.has(unit));
+
+    if (availableUnits.length === 0) {
+      continue;
+    }
+
+    afterUnitReassignment.push({
+      ...incident,
+      units: availableUnits,
+    });
+
+    availableUnits.forEach(unit => assignedUnits.add(unit));
+  }
+
+  const reassignedCount = incidents.length - afterUnitReassignment.length;
+
+  const normalizeCallType = (callType: string) => {
+    return callType.toLowerCase().replace(/[^a-z0-9]/g, '');
+  };
+
+  const normalizeAddressForDedup = (addr: string | undefined): string => {
+    if (!addr || addr === '?') return '';
+    return addr
+      .toLowerCase()
+      .replace(/\s+/g, '')
+      .replace(/[^a-z0-9]/g, '');
+  };
+
+  const seenByCallType = new Map<string, DispatchIncident[]>();
+  const deduplicated: DispatchIncident[] = [];
+
+  for (const incident of afterUnitReassignment) {
+    const normalizedCallType = normalizeCallType(incident.callType);
+
+    if (!seenByCallType.has(normalizedCallType)) {
+      seenByCallType.set(normalizedCallType, []);
+    }
+    seenByCallType.get(normalizedCallType)!.push(incident);
+  }
+
+  for (const [, incidents] of seenByCallType.entries()) {
+    const incidentsWithAddress = incidents.filter(inc => inc.address && inc.address !== '?');
+    const incidentsWithoutAddress = incidents.filter(inc => !inc.address || inc.address === '?');
+
+    const grouped = new Map<string, DispatchIncident[]>();
+
+    for (const incident of incidentsWithAddress) {
+      const normalizedAddress = normalizeAddressForDedup(incident.address);
+      if (!grouped.has(normalizedAddress)) {
+        grouped.set(normalizedAddress, []);
+      }
+      grouped.get(normalizedAddress)!.push(incident);
+    }
+
+    for (const [, addressIncidents] of grouped.entries()) {
+      const sorted = addressIncidents.sort((a, b) =>
+        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      );
+      deduplicated.push(sorted[0]);
+    }
+
+    if (incidentsWithoutAddress.length > 0) {
+      const allUnitsInAddressedIncidents = new Set<string>();
+      for (const incident of incidentsWithAddress) {
+        if (incident.units) {
+          incident.units.forEach(unit => allUnitsInAddressedIncidents.add(unit));
+        }
+      }
+
+      for (const incident of incidentsWithoutAddress) {
+        if (!incident.units || incident.units.length === 0) {
+          continue;
+        }
+
+        const hasUniqueUnits = incident.units.some(unit => !allUnitsInAddressedIncidents.has(unit));
+
+        if (hasUniqueUnits) {
+          deduplicated.push(incident);
+        }
+      }
+    }
+  }
+
+  const duplicateCount = afterUnitReassignment.length - deduplicated.length;
+
+  return { deduplicated, reassignedCount, duplicateCount };
+}
+
 export async function GET(request: NextRequest) {
+  const searchParams = request.nextUrl.searchParams;
+  const stream = searchParams.get('stream');
+
+  if (stream !== '1') {
+    return getLegacyResponse(request);
+  }
+
+  try {
+    console.log('\n=== BROADCASTIFY LIVE CALLS API START (STREAMING) ===');
+    const pos = searchParams.get('pos');
+    const init = searchParams.get('init');
+    console.log('Request params - pos:', pos, 'init:', init);
+
+    const auth = await authenticateUser();
+    const jwt = generateBroadcastifyJWT(auth.uid, auth.token);
+
+    let url = `${BROADCASTIFY_LIVE_ENDPOINT}?groups=${GROUP_ID}`;
+    if (init === '1') {
+      url += '&init=1';
+    } else if (pos) {
+      url += `&pos=${pos}`;
+    }
+
+    console.log('Fetching live calls from:', url);
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${jwt}`,
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Broadcastify error response:', errorText);
+      throw new Error(`Broadcastify API error: ${response.statusText}`);
+    }
+
+    const data: BroadcastifyLiveResponse = await response.json();
+    console.log('Calls count:', data.calls.length);
+
+    const encoder = new TextEncoder();
+    const readableStream = new ReadableStream({
+      async start(controller) {
+        try {
+          const sendEvent = (event: string, data: any) => {
+            controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+          };
+
+          sendEvent('metadata', {
+            lastPos: data.lastPos,
+            serverTime: data.serverTime,
+            totalCalls: data.calls.length,
+          });
+
+          if (data.calls.length === 0) {
+            sendEvent('complete', { processed: 0, skipped: 0 });
+            controller.close();
+            return;
+          }
+
+          console.log('\n=== PRIORITY SORTING (NO TRANSCRIPTION) ===');
+          const callsWithPriority = data.calls.map((call) => {
+            const estimatedResolution = quickEstimateResolution(call.descr || '');
+            const age = (Date.now() - call.ts * 1000) / (1000 * 60);
+            const willShowInDynamicFilter = age < estimatedResolution;
+
+            console.log(`  Call ${call.ts}: "${call.descr}" → ${estimatedResolution}min estimate, ${age.toFixed(1)}min old, ${willShowInDynamicFilter ? 'PRIORITY' : 'standard'}`);
+
+            return {
+              call,
+              estimatedResolution,
+              priority: willShowInDynamicFilter ? 1 : 2,
+            };
+          });
+
+          callsWithPriority.sort((a, b) => a.priority - b.priority || b.call.ts - a.call.ts);
+
+          console.log('\n=== PROCESSING ONE-BY-ONE IN PRIORITY ORDER ===');
+          const processedIncidents: DispatchIncident[] = [];
+          let completed = 0;
+          let skipped = 0;
+
+          for (const { call, priority } of callsWithPriority) {
+            try {
+              sendEvent('progress', {
+                completed,
+                total: callsWithPriority.length,
+                current: call.ts,
+                priority,
+              });
+
+              console.log(`\n[${completed + 1}/${callsWithPriority.length}] Processing call ${call.ts} (priority ${priority})...`);
+
+              const transcript = await transcribeAudio(call.url);
+              console.log(`  ✓ Transcribed: "${transcript.substring(0, 60)}..."`);
+
+              const incident = await processCallWithTranscript(call, transcript);
+
+              if (incident) {
+                processedIncidents.push(incident);
+                sendEvent('incident', incident);
+                completed++;
+                console.log(`  ✓ Processed ${incident.id} → streaming to client`);
+              } else {
+                skipped++;
+                console.log(`  ✗ Skipped (no incident created)`);
+              }
+            } catch (error) {
+              console.error(`  ✗ Error processing call ${call.ts}:`, error);
+              skipped++;
+            }
+          }
+
+          console.log('\n=== POST-PROCESSING ===');
+          const { deduplicated, reassignedCount, duplicateCount } = postProcessIncidents(processedIncidents);
+
+          sendEvent('complete', {
+            processed: completed,
+            skipped,
+            reassignedCount,
+            duplicateCount,
+            final: deduplicated.length,
+          });
+
+          controller.close();
+          console.log('=== STREAMING COMPLETE ===\n');
+        } catch (error) {
+          console.error('Stream error:', error);
+          controller.error(error);
+        }
+      },
+    });
+
+    return new Response(readableStream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      },
+    });
+  } catch (error) {
+    console.error('Live calls API error:', error);
+    return NextResponse.json(
+      { error: 'Failed to fetch live calls' },
+      { status: 500 }
+    );
+  }
+}
+
+async function getLegacyResponse(request: NextRequest) {
   try {
     console.log('\n=== BROADCASTIFY LIVE CALLS API START ===');
     const searchParams = request.nextUrl.searchParams;

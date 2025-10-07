@@ -27,6 +27,38 @@ const ADDRESS_PATTERNS = [
   /(?:at|@)\s+([A-Za-z\s]+(?:street|st|avenue|ave|road|rd|boulevard|blvd|drive|dr|lane|ln|way|court|ct|place|pl|circle|cir)\s+and\s+[A-Za-z\s]+(?:street|st|avenue|ave|road|rd|boulevard|blvd|drive|dr|lane|ln|way|court|ct|place|pl|circle|cir))/i,
 ];
 
+export function quickEstimateResolution(transcript: string): number {
+  const lower = transcript.toLowerCase();
+
+  if (/\b(fifth|5th)\s+alarm\b/i.test(lower)) return 240;
+  if (/\b(fourth|4th)\s+alarm\b/i.test(lower)) return 180;
+  if (/\b(third|3rd)\s+alarm\b/i.test(lower)) return 180;
+  if (/\b(second|2nd)\s+alarm\b/i.test(lower)) return 120;
+  if (/\b(first|1st)\s+alarm\b/i.test(lower)) return 60;
+
+  if (/\b(structure\s+fire|building\s+fire|house\s+fire)\b/i.test(lower)) return 45;
+  if (/\b(vehicle\s+fire|car\s+fire)\b/i.test(lower)) return 30;
+  if (/\b(brush\s+fire|wildfire|grass\s+fire)\b/i.test(lower)) return 45;
+  if (/\b(hazmat|hazardous\s+materials)\b/i.test(lower)) return 90;
+  if (/\b(rescue|confined\s+space|trench\s+rescue|water\s+rescue)\b/i.test(lower)) return 60;
+
+  if (/\b(cardiac\s+arrest|code\s+blue|cpr)\b/i.test(lower)) return 30;
+  if (/\b(chest\s+pain|heart\s+attack|mi\b)\b/i.test(lower)) return 30;
+  if (/\b(stroke|cva)\b/i.test(lower)) return 30;
+  if (/\b(unconscious|unresponsive)\b/i.test(lower)) return 30;
+  if (/\b(respiratory|breathing|difficulty\s+breathing)\b/i.test(lower)) return 30;
+  if (/\b(trauma|shooting|gunshot|stabbing)\b/i.test(lower)) return 45;
+  if (/\b(overdose|od\b)\b/i.test(lower)) return 30;
+
+  if (/\b(lift\s+assist)\b/i.test(lower)) return 20;
+  if (/\b(alarm\s+activation|fire\s+alarm)\b/i.test(lower)) return 15;
+  if (/\b(fall|fallen)\b/i.test(lower)) return 25;
+
+  if (/\b(mva|motor\s+vehicle\s+accident|traffic\s+accident|collision)\b/i.test(lower)) return 45;
+
+  return 60;
+}
+
 function preprocessTranscript(transcript: string): string {
   let processed = transcript;
 
