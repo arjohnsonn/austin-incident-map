@@ -24,26 +24,48 @@ function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-const rateLimiters = {
-  nominatim: { lastRequest: 0 },
-  mapsCoKey1: { lastRequest: 0 },
-  mapsCoKey2: { lastRequest: 0 },
-};
+class RateLimiter {
+  private lastRequest = 0;
+  private queue: (() => void)[] = [];
+  private processing = false;
 
-async function waitForRateLimit(limiter: { lastRequest: number }, minIntervalMs: number): Promise<void> {
-  const now = Date.now();
-  const timeSinceLastRequest = now - limiter.lastRequest;
-  const waitTime = Math.max(0, minIntervalMs - timeSinceLastRequest);
-
-  if (waitTime > 0) {
-    await delay(waitTime);
+  async acquire(minIntervalMs: number): Promise<void> {
+    return new Promise((resolve) => {
+      this.queue.push(resolve);
+      this.processQueue(minIntervalMs);
+    });
   }
 
-  limiter.lastRequest = Date.now();
+  private async processQueue(minIntervalMs: number): Promise<void> {
+    if (this.processing) return;
+    this.processing = true;
+
+    while (this.queue.length > 0) {
+      const now = Date.now();
+      const timeSinceLastRequest = now - this.lastRequest;
+      const waitTime = Math.max(0, minIntervalMs - timeSinceLastRequest);
+
+      if (waitTime > 0) {
+        await delay(waitTime);
+      }
+
+      this.lastRequest = Date.now();
+      const resolve = this.queue.shift();
+      if (resolve) resolve();
+    }
+
+    this.processing = false;
+  }
 }
 
+const rateLimiters = {
+  nominatim: new RateLimiter(),
+  mapsCoKey1: new RateLimiter(),
+  mapsCoKey2: new RateLimiter(),
+};
+
 async function geocodeWithNominatim(query: string): Promise<[number, number] | null> {
-  await waitForRateLimit(rateLimiters.nominatim, 1000);
+  await rateLimiters.nominatim.acquire(1000);
 
   try {
     const viewbox = '-98.2,30.0,-97.4,30.6';
@@ -78,7 +100,7 @@ async function geocodeWithNominatim(query: string): Promise<[number, number] | n
 
 async function geocodeWithMapsCo(query: string, apiKey: string, keyName: string): Promise<[number, number] | null> {
   const limiter = keyName === 'Key 1' ? rateLimiters.mapsCoKey1 : rateLimiters.mapsCoKey2;
-  await waitForRateLimit(limiter, 1000);
+  await limiter.acquire(1000);
 
   try {
     const queryWithLocation = `${query}, Austin, Travis County, Texas`;
@@ -264,23 +286,23 @@ export async function GET(request: NextRequest) {
 
         const parsed = await parseDispatchCallWithAI(transcript);
 
-        if (!parsed.address) {
-          console.log('❌ Skipping - missing address');
-          return null;
-        }
-
         const finalCallType = parsed.callType || '?';
 
-        console.log('Geocoding address with variants:', parsed.addressVariants);
-        const coordinates = await geocodeAddress(parsed.addressVariants);
-        console.log('Coordinates:', coordinates);
+        let coordinates: [number, number] | null = null;
+        if (parsed.address && parsed.addressVariants.length > 0) {
+          console.log('Geocoding address with variants:', parsed.addressVariants);
+          coordinates = await geocodeAddress(parsed.addressVariants);
+          console.log('Coordinates:', coordinates);
+        } else {
+          console.log('⚠️ No address found - incident will show in list only');
+        }
 
         const incident: DispatchIncident = {
           id: `${call.groupId}-${call.ts}-${call.start_ts}`,
           callType: finalCallType,
           units: parsed.units,
           channels: parsed.channels,
-          address: parsed.address,
+          address: parsed.address || '?',
           location: coordinates ? {
             type: 'Point',
             coordinates,
@@ -491,14 +513,10 @@ export async function GET(request: NextRequest) {
 
     for (let i = 0; i < deduplicated.length; i++) {
       const incident = deduplicated[i];
-      const hasValidCallType = incident.callType && incident.callType !== '?' && incident.callType !== '-';
-      const hasValidAddress = incident.address && incident.address !== '?';
       const hasCoordinates = !!incident.location;
 
       for (let j = i + 1; j < deduplicated.length; j++) {
         const other = deduplicated[j];
-        const otherHasValidCallType = other.callType && other.callType !== '?' && other.callType !== '-';
-        const otherHasValidAddress = other.address && other.address !== '?';
         const otherHasCoordinates = !!other.location;
 
         const timeDiff = Math.abs(
