@@ -73,7 +73,7 @@ export default function Home() {
       </header>
 
       <ResizablePanelGroup direction="horizontal" className="flex-1">
-        <ResizablePanel defaultSize={40} minSize={40}>
+        <ResizablePanel defaultSize={55} minSize={40}>
           <IncidentsList
             incidents={incidents}
             selectedIncident={selectedIncident}
@@ -88,7 +88,7 @@ export default function Home() {
 
         <ResizableHandle withHandle />
 
-        <ResizablePanel defaultSize={50} minSize={30}>
+        <ResizablePanel defaultSize={45} minSize={30}>
           <IncidentMap
             incidents={displayedIncidents}
             selectedIncident={selectedIncident}

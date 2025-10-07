@@ -69,7 +69,7 @@ const VirtualizedList = memo(
       callType: 168,
       address: 192,
       units: 128,
-      channels: 96,
+      channels: 110,
     });
     const [isResizing, setIsResizing] = useState(false);
     const resizingColumn = useRef<string | null>(null);
@@ -255,12 +255,8 @@ const VirtualizedList = memo(
                 <div className="w-3 h-3" />
               )}
             </div>
-            <div style={{ width: columnWidths.time }} className="text-center text-neutral-500 dark:text-neutral-400 font-mono flex-shrink-0 relative group">
+            <div style={{ width: columnWidths.time }} className="text-center text-neutral-500 dark:text-neutral-400 font-mono flex-shrink-0">
               {formatDate(incident.published_date)}
-              <div
-                className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-500 opacity-0 group-hover:opacity-100"
-                onMouseDown={(e) => handleResizeStart(e, 'time')}
-              />
             </div>
             <div style={{ width: columnWidths.callType }} className="px-2 truncate font-medium flex-shrink-0 relative group">
               {incident.issue_reported}
@@ -324,19 +320,11 @@ const VirtualizedList = memo(
           {/* Table Header - now inside scrollable area */}
           <div className="bg-neutral-900 dark:bg-black text-white text-xs font-bold px-2 py-2 border-b-2 border-neutral-600 sticky top-0 z-10 min-w-[800px]">
             <div className="flex items-center">
-              <div style={{ width: columnWidths.play }} className="text-center flex-shrink-0 flex items-center justify-center relative">
+              <div style={{ width: columnWidths.play }} className="text-center flex-shrink-0 flex items-center justify-center">
                 <Volume2 className="w-3 h-3" />
-                <div
-                  className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-400 bg-neutral-700"
-                  onMouseDown={(e) => handleResizeStart(e, 'play')}
-                />
               </div>
-              <div style={{ width: columnWidths.time }} className="text-center flex-shrink-0 relative">
+              <div style={{ width: columnWidths.time }} className="text-center flex-shrink-0">
                 TIME
-                <div
-                  className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-400 bg-neutral-700"
-                  onMouseDown={(e) => handleResizeStart(e, 'time')}
-                />
               </div>
               <div style={{ width: columnWidths.callType }} className="px-2 flex-shrink-0 relative">
                 CALL TYPE
