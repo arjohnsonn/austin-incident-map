@@ -342,6 +342,14 @@ export async function GET(request: NextRequest) {
       return callType.toLowerCase().replace(/[^a-z0-9]/g, '');
     };
 
+    const normalizeAddressForDedup = (addr: string | undefined): string => {
+      if (!addr || addr === '?') return '';
+      return addr
+        .toLowerCase()
+        .replace(/\s+/g, '')
+        .replace(/[^a-z0-9]/g, '');
+    };
+
     const seenByCallType = new Map<string, DispatchIncident[]>();
     const deduplicated: DispatchIncident[] = [];
 
@@ -361,7 +369,7 @@ export async function GET(request: NextRequest) {
       const grouped = new Map<string, DispatchIncident[]>();
 
       for (const incident of incidentsWithAddress) {
-        const normalizedAddress = incident.address.trim().toLowerCase();
+        const normalizedAddress = normalizeAddressForDedup(incident.address);
         if (!grouped.has(normalizedAddress)) {
           grouped.set(normalizedAddress, []);
         }
