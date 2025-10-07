@@ -263,7 +263,7 @@ const VirtualizedList = memo(
 
       visibleItems.push(
         <div
-          key={incident.traffic_report_id}
+          key={`${incident.traffic_report_id}-${i}`}
           className={`absolute left-0 right-0 cursor-pointer transition-colors border-b border-neutral-300 dark:border-neutral-600 hover:bg-neutral-100 dark:hover:bg-neutral-700 min-w-[800px] ${
             isSelected
               ? "bg-blue-200 dark:bg-blue-800"

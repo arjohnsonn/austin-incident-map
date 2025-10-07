@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import {
   ResizablePanelGroup,
   ResizablePanel,
@@ -40,6 +40,24 @@ export default function Home() {
     null
   );
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
+  const [replayingIncident, setReplayingIncident] = useState<FireIncident | null>(
+    null
+  );
+  const [replayInjectedIncidents, setReplayInjectedIncidents] = useState<FireIncident[]>(
+    []
+  );
+
+  const finalIncidents = useMemo(() => {
+    let filtered = incidents;
+
+    if (replayingIncident) {
+      filtered = filtered.filter(
+        (inc) => inc.traffic_report_id !== replayingIncident.traffic_report_id
+      );
+    }
+
+    return [...replayInjectedIncidents, ...filtered];
+  }, [incidents, replayingIncident, replayInjectedIncidents]);
 
   const handleDisplayedIncidentsChange = useCallback(
     (incidents: FireIncident[]) => {
@@ -60,6 +78,21 @@ export default function Home() {
   const handleAudioStateChange = useCallback((playing: boolean) => {
     setIsAudioPlaying(playing);
   }, []);
+
+  const handleReplayIncident = useCallback((incident: FireIncident) => {
+    if (replayingIncident) {
+      toast.error("A replay is already in progress");
+      return;
+    }
+
+    setReplayingIncident(incident);
+    setReplayInjectedIncidents([]);
+
+    setTimeout(() => {
+      setReplayInjectedIncidents([incident]);
+      setReplayingIncident(null);
+    }, 3000);
+  }, [replayingIncident]);
 
   useEffect(() => {
     if (isManualRefresh && lastUpdated) {
@@ -95,7 +128,10 @@ export default function Home() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <SettingsDialog />
+            <SettingsDialog
+              incidents={incidents}
+              onReplayIncident={handleReplayIncident}
+            />
             <ThemeToggle />
           </div>
         </div>
@@ -104,7 +140,7 @@ export default function Home() {
       <ResizablePanelGroup direction="horizontal" className="flex-1">
         <ResizablePanel defaultSize={55} minSize={40}>
           <IncidentsList
-            incidents={incidents}
+            incidents={finalIncidents}
             selectedIncident={selectedIncident}
             onIncidentSelect={setSelectedIncident}
             onDisplayedIncidentsChange={handleDisplayedIncidentsChange}
