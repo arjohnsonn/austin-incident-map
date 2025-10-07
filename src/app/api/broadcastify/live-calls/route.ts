@@ -26,32 +26,36 @@ function delay(ms: number): Promise<void> {
 
 class RateLimiter {
   private lastRequest = 0;
-  private queue: (() => void)[] = [];
+  private queue: Array<{ resolve: () => void; minIntervalMs: number }> = [];
   private processing = false;
 
   async acquire(minIntervalMs: number): Promise<void> {
     return new Promise((resolve) => {
-      this.queue.push(resolve);
-      this.processQueue(minIntervalMs);
+      this.queue.push({ resolve, minIntervalMs });
+      if (!this.processing) {
+        this.processQueue();
+      }
     });
   }
 
-  private async processQueue(minIntervalMs: number): Promise<void> {
+  private async processQueue(): Promise<void> {
     if (this.processing) return;
     this.processing = true;
 
     while (this.queue.length > 0) {
+      const item = this.queue.shift();
+      if (!item) break;
+
       const now = Date.now();
       const timeSinceLastRequest = now - this.lastRequest;
-      const waitTime = Math.max(0, minIntervalMs - timeSinceLastRequest);
+      const waitTime = Math.max(0, item.minIntervalMs - timeSinceLastRequest);
 
       if (waitTime > 0) {
         await delay(waitTime);
       }
 
       this.lastRequest = Date.now();
-      const resolve = this.queue.shift();
-      if (resolve) resolve();
+      item.resolve();
     }
 
     this.processing = false;
