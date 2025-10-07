@@ -24,7 +24,27 @@ function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+const rateLimiters = {
+  nominatim: { lastRequest: 0 },
+  mapsCoKey1: { lastRequest: 0 },
+  mapsCoKey2: { lastRequest: 0 },
+};
+
+async function waitForRateLimit(limiter: { lastRequest: number }, minIntervalMs: number): Promise<void> {
+  const now = Date.now();
+  const timeSinceLastRequest = now - limiter.lastRequest;
+  const waitTime = Math.max(0, minIntervalMs - timeSinceLastRequest);
+
+  if (waitTime > 0) {
+    await delay(waitTime);
+  }
+
+  limiter.lastRequest = Date.now();
+}
+
 async function geocodeWithNominatim(query: string): Promise<[number, number] | null> {
+  await waitForRateLimit(rateLimiters.nominatim, 1000);
+
   try {
     const viewbox = '-98.2,30.0,-97.4,30.6';
     const response = await withTimeout(
@@ -57,6 +77,9 @@ async function geocodeWithNominatim(query: string): Promise<[number, number] | n
 }
 
 async function geocodeWithMapsCo(query: string, apiKey: string, keyName: string): Promise<[number, number] | null> {
+  const limiter = keyName === 'Key 1' ? rateLimiters.mapsCoKey1 : rateLimiters.mapsCoKey2;
+  await waitForRateLimit(limiter, 1000);
+
   try {
     const queryWithLocation = `${query}, Austin, Travis County, Texas`;
     const response = await withTimeout(
@@ -120,14 +143,12 @@ async function geocodeAddress(addressVariants: string[]): Promise<[number, numbe
     if (nominatimResult && isWithinAustinArea(nominatimResult)) {
       return nominatimResult;
     }
-    await delay(200);
 
     if (mapsCoKey1) {
       const mapsCoResult1 = await geocodeWithMapsCo(query, mapsCoKey1, 'Key 1');
       if (mapsCoResult1 && isWithinAustinArea(mapsCoResult1)) {
         return mapsCoResult1;
       }
-      await delay(200);
     }
 
     if (mapsCoKey2) {
@@ -135,7 +156,6 @@ async function geocodeAddress(addressVariants: string[]): Promise<[number, numbe
       if (mapsCoResult2 && isWithinAustinArea(mapsCoResult2)) {
         return mapsCoResult2;
       }
-      await delay(200);
     }
   }
 
