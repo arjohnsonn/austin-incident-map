@@ -69,7 +69,7 @@ const VirtualizedList = memo(
       time: 80,
       callType: 168,
       address: 192,
-      units: 128,
+      units: 140,
       channels: 110,
     });
     const [isResizing, setIsResizing] = useState(false);
