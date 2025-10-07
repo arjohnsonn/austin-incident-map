@@ -20,6 +20,10 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   ]);
 }
 
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 async function geocodeWithNominatim(query: string): Promise<[number, number] | null> {
   try {
     const viewbox = '-98.2,30.0,-97.4,30.6';
@@ -34,6 +38,11 @@ async function geocodeWithNominatim(query: string): Promise<[number, number] | n
       ),
       5000
     );
+
+    if (!response.ok) {
+      console.log(`Nominatim HTTP ${response.status} for "${query}"`);
+      return null;
+    }
 
     const data = await response.json();
     if (data && data.length > 0) {
@@ -56,6 +65,15 @@ async function geocodeWithMapsCo(query: string, apiKey: string, keyName: string)
       ),
       5000
     );
+
+    if (!response.ok) {
+      if (response.status === 429) {
+        console.log(`Maps.co (${keyName}) rate limited (429) for "${query}"`);
+      } else {
+        console.log(`Maps.co (${keyName}) HTTP ${response.status} for "${query}"`);
+      }
+      return null;
+    }
 
     const data = await response.json();
     if (data && data.length > 0) {
@@ -102,12 +120,14 @@ async function geocodeAddress(addressVariants: string[]): Promise<[number, numbe
     if (nominatimResult && isWithinAustinArea(nominatimResult)) {
       return nominatimResult;
     }
+    await delay(200);
 
     if (mapsCoKey1) {
       const mapsCoResult1 = await geocodeWithMapsCo(query, mapsCoKey1, 'Key 1');
       if (mapsCoResult1 && isWithinAustinArea(mapsCoResult1)) {
         return mapsCoResult1;
       }
+      await delay(200);
     }
 
     if (mapsCoKey2) {
@@ -115,6 +135,7 @@ async function geocodeAddress(addressVariants: string[]): Promise<[number, numbe
       if (mapsCoResult2 && isWithinAustinArea(mapsCoResult2)) {
         return mapsCoResult2;
       }
+      await delay(200);
     }
   }
 
