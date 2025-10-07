@@ -21,8 +21,8 @@ export function CallBanner({ incident, onComplete, isAudioPlaying }: CallBannerP
     }
 
     const items = [
-      incident.issue_reported || 'Unknown Call Type',
-      incident.address || 'Unknown Address',
+      (incident.issue_reported === '?' ? 'Nondeterminate' : incident.issue_reported) || 'Unknown Call Type',
+      (incident.address === '?' ? 'Nondeterminate' : incident.address) || 'Unknown Address',
       incident.units?.join(', ') || 'No Units',
       incident.channels?.join(', ') || 'No Channel',
     ];
@@ -58,8 +58,8 @@ export function CallBanner({ incident, onComplete, isAudioPlaying }: CallBannerP
   if (!incident || (cycleCount >= 3 && !isAudioPlaying)) return null;
 
   const items = [
-    { label: 'CALL TYPE', value: incident.issue_reported || 'Unknown Call Type' },
-    { label: 'ADDRESS', value: incident.address || 'Unknown Address' },
+    { label: 'CALL TYPE', value: (incident.issue_reported === '?' ? 'Nondeterminate' : incident.issue_reported) || 'Unknown Call Type' },
+    { label: 'ADDRESS', value: (incident.address === '?' ? 'Nondeterminate' : incident.address) || 'Unknown Address' },
     { label: 'UNITS', value: incident.units?.join(', ') || 'No Units' },
     { label: 'CHANNEL', value: incident.channels?.join(', ') || 'No Channel' },
   ];
