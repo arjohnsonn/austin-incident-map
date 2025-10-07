@@ -151,21 +151,18 @@
 }
 
 @keyframes new-incident-flash {
-  0% {
-    background-color: rgba(239, 68, 68, 0.4);
+  0%, 20%, 40% {
+    background-color: rgba(239, 68, 68, 0.5);
   }
-  50% {
-    background-color: rgba(239, 68, 68, 0.2);
-  }
-  100% {
+  10%, 30%, 50%, 100% {
     background-color: transparent;
   }
 }
 
 .dark .animate-new-incident {
-  animation: new-incident-flash 3s ease-out;
+  animation: new-incident-flash 1.5s ease-in-out;
 }
 
 .animate-new-incident {
-  animation: new-incident-flash 3s ease-out;
+  animation: new-incident-flash 1.5s ease-in-out;
 }
