@@ -81,7 +81,7 @@ function preprocessTranscript(transcript: string): string {
   processed = processed.replace(/\b(?:Bach|batch)\s*,?\s*ST[-\s]*(\d+)/gi, 'Box ST-$1');
   processed = processed.replace(/\bChesapeake\b/gi, 'Chest Pain');
   processed = processed.replace(/\bESC\s+(\d+)/gi, 'ESD $1');
-  processed = processed.replace(/\b[Rr]oke\b/g, 'stroke');
+  processed = processed.replace(/\b[BbRr]roke\b/g, 'stroke');
 
   return processed;
 }

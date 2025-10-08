@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import OpenAI from 'openai';
+import { createClient } from '@deepgram/sdk';
 import { generateBroadcastifyJWT, authenticateUser } from '@/lib/broadcastify-jwt';
 import { parseDispatchCallWithAI, quickEstimateResolution } from '@/lib/dispatch-parser';
 import { BroadcastifyLiveResponse, DispatchIncident } from '@/types/broadcastify';
@@ -7,9 +7,7 @@ import { BroadcastifyLiveResponse, DispatchIncident } from '@/types/broadcastify
 const BROADCASTIFY_LIVE_ENDPOINT = 'https://api.bcfy.io/calls/v1/live/';
 const GROUP_ID = '2-1147';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+const deepgram = createClient(process.env.DEEPGRAM_API_KEY || '');
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   return Promise.race([
@@ -191,29 +189,27 @@ async function geocodeAddress(addressVariants: string[]): Promise<[number, numbe
 
 async function transcribeAudio(audioUrl: string): Promise<string> {
   try {
-    const audioResponse = await fetch(audioUrl);
-    const audioBuffer = await audioResponse.arrayBuffer();
+    const { result, error } = await deepgram.listen.prerecorded.transcribeUrl(
+      { url: audioUrl },
+      {
+        model: 'nova-2',
+        smart_format: true,
+        language: 'en-US',
+      }
+    );
 
-    const extension = audioUrl.split('.').pop()?.toLowerCase() || 'mp3';
-    const mimeTypes: Record<string, string> = {
-      'mp3': 'audio/mpeg',
-      'mp4': 'audio/mp4',
-      'm4a': 'audio/mp4',
-      'wav': 'audio/wav',
-      'webm': 'audio/webm',
-      'ogg': 'audio/ogg',
-      'flac': 'audio/flac',
-    };
+    if (error) {
+      console.error('Deepgram error:', error);
+      throw new Error(`Deepgram transcription failed: ${error.message}`);
+    }
 
-    const mimeType = mimeTypes[extension] || 'audio/mpeg';
-    const audioFile = new File([audioBuffer], `audio.${extension}`, { type: mimeType });
+    const transcript = result?.results?.channels?.[0]?.alternatives?.[0]?.transcript;
 
-    const transcription = await openai.audio.transcriptions.create({
-      file: audioFile,
-      model: 'whisper-1',
-    });
+    if (!transcript) {
+      throw new Error('No transcript returned from Deepgram');
+    }
 
-    return transcription.text;
+    return transcript;
   } catch (error) {
     console.error('Transcription error:', error);
     throw error;
@@ -439,40 +435,63 @@ export async function GET(request: NextRequest) {
 
           callsWithPriority.sort((a, b) => a.priority - b.priority || b.call.ts - a.call.ts);
 
-          console.log('\n=== PROCESSING ONE-BY-ONE IN PRIORITY ORDER ===');
+          console.log('\n=== PROCESSING IN PARALLEL BATCHES (PRIORITY ORDER) ===');
           const processedIncidents: DispatchIncident[] = [];
           let completed = 0;
           let skipped = 0;
 
-          for (const { call, priority } of callsWithPriority) {
-            try {
-              sendEvent('progress', {
-                completed,
-                total: callsWithPriority.length,
-                current: call.ts,
-                priority,
-              });
+          const BATCH_SIZE = 20;
 
-              console.log(`\n[${completed + 1}/${callsWithPriority.length}] Processing call ${call.ts} (priority ${priority})...`);
+          for (let i = 0; i < callsWithPriority.length; i += BATCH_SIZE) {
+            const batch = callsWithPriority.slice(i, i + BATCH_SIZE);
+            const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+            const totalBatches = Math.ceil(callsWithPriority.length / BATCH_SIZE);
 
-              const transcript = await transcribeAudio(call.url);
-              console.log(`  ✓ Transcribed: "${transcript.substring(0, 60)}..."`);
+            console.log(`\n🔄 Processing batch ${batchNum}/${totalBatches} (${batch.length} calls)`);
 
-              const incident = await processCallWithTranscript(call, transcript);
+            sendEvent('progress', {
+              completed,
+              total: callsWithPriority.length,
+              currentBatch: batchNum,
+              totalBatches,
+            });
 
-              if (incident) {
-                processedIncidents.push(incident);
-                sendEvent('incident', incident);
+            const batchResults = await Promise.all(
+              batch.map(async ({ call, priority }) => {
+                try {
+                  console.log(`  [Batch ${batchNum}] Transcribing call ${call.ts} (priority ${priority})...`);
+
+                  const transcript = await transcribeAudio(call.url);
+                  console.log(`  ✓ Transcribed ${call.ts}: "${transcript.substring(0, 60)}..."`);
+
+                  const incident = await processCallWithTranscript(call, transcript);
+
+                  if (incident) {
+                    console.log(`  ✓ Processed ${incident.id}`);
+                    return { success: true, incident };
+                  } else {
+                    console.log(`  ✗ Skipped ${call.ts} (no incident created)`);
+                    return { success: false, incident: null };
+                  }
+                } catch (error) {
+                  console.error(`  ✗ Error processing call ${call.ts}:`, error);
+                  return { success: false, incident: null };
+                }
+              })
+            );
+
+            for (const result of batchResults) {
+              if (result.success && result.incident) {
+                processedIncidents.push(result.incident);
+                sendEvent('incident', result.incident);
                 completed++;
-                console.log(`  ✓ Processed ${incident.id} → streaming to client`);
+                console.log(`  → Streaming ${result.incident.id} to client`);
               } else {
                 skipped++;
-                console.log(`  ✗ Skipped (no incident created)`);
               }
-            } catch (error) {
-              console.error(`  ✗ Error processing call ${call.ts}:`, error);
-              skipped++;
             }
+
+            console.log(`✓ Batch ${batchNum} complete: ${batchResults.filter(r => r.success).length}/${batch.length} successful`);
           }
 
           console.log('\n=== POST-PROCESSING ===');
@@ -577,7 +596,7 @@ async function getLegacyResponse(request: NextRequest) {
         console.log('Downloading audio from:', call.url);
 
         const transcript = await transcribeAudio(call.url);
-        console.log('Raw transcription from Whisper:', transcript);
+        console.log('Raw transcription from Deepgram:', transcript);
 
         const parsed = await parseDispatchCallWithAI(transcript);
 
