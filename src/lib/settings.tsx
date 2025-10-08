@@ -6,6 +6,7 @@ export interface AppSettings {
   autoPlayAudio: boolean;
   showBanner: boolean;
   hideIncompleteIncidents: boolean;
+  hideIncidentsWithoutUnitsOrCallType: boolean;
 }
 
 const SETTINGS_KEY = 'app_settings';
@@ -13,7 +14,8 @@ const SETTINGS_KEY = 'app_settings';
 const defaultSettings: AppSettings = {
   autoPlayAudio: false,
   showBanner: true,
-  hideIncompleteIncidents: false,
+  hideIncompleteIncidents: true,
+  hideIncidentsWithoutUnitsOrCallType: true,
 };
 
 interface SettingsContextType {

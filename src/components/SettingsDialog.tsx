@@ -93,7 +93,7 @@ export function SettingsDialog({ incidents = [], onReplayIncident }: SettingsDia
                 Hide incomplete incidents
               </label>
               <p className="text-sm text-muted-foreground">
-                Hide list entries without a call type or address
+                Hide incidents when all fields are missing
               </p>
             </div>
             <Switch
@@ -101,6 +101,24 @@ export function SettingsDialog({ incidents = [], onReplayIncident }: SettingsDia
               checked={settings.hideIncompleteIncidents}
               onCheckedChange={(checked) =>
                 updateSettings({ hideIncompleteIncidents: checked })
+              }
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <label htmlFor="hide-no-units-calltype" className="text-sm font-medium">
+                Hide incidents without units and call type
+              </label>
+              <p className="text-sm text-muted-foreground">
+                Hide incidents missing both units and call type
+              </p>
+            </div>
+            <Switch
+              id="hide-no-units-calltype"
+              checked={settings.hideIncidentsWithoutUnitsOrCallType}
+              onCheckedChange={(checked) =>
+                updateSettings({ hideIncidentsWithoutUnitsOrCallType: checked })
               }
             />
           </div>

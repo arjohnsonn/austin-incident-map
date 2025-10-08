@@ -589,16 +589,34 @@ export function IncidentsList({
   const allFilteredIncidents = useMemo(() => {
     const filtered = incidents.filter((incident) => {
       if (settings.hideIncompleteIncidents) {
-        const hasValidCallType = incident.issue_reported &&
-          incident.issue_reported !== 'Nondeterminate' &&
-          incident.issue_reported.trim() !== '';
+        const hasNoCallType = !incident.issue_reported ||
+          incident.issue_reported === '?' ||
+          incident.issue_reported === 'Nondeterminate' ||
+          incident.issue_reported.trim() === '';
 
-        const hasValidAddress = incident.location &&
-          incident.location.coordinates &&
-          incident.location.coordinates[0] !== 0 &&
-          incident.location.coordinates[1] !== 0;
+        const hasNoAddress = !incident.location ||
+          !incident.location.coordinates ||
+          incident.location.coordinates[0] === 0 ||
+          incident.location.coordinates[1] === 0;
 
-        if (!hasValidCallType || !hasValidAddress) {
+        const hasNoUnits = !incident.units || incident.units.length === 0;
+
+        const hasNoChannels = !incident.channels || incident.channels.length === 0;
+
+        if (hasNoCallType && hasNoAddress && hasNoUnits && hasNoChannels) {
+          return false;
+        }
+      }
+
+      if (settings.hideIncidentsWithoutUnitsOrCallType) {
+        const hasNoCallType = !incident.issue_reported ||
+          incident.issue_reported === '?' ||
+          incident.issue_reported === 'Nondeterminate' ||
+          incident.issue_reported.trim() === '';
+
+        const hasNoUnits = !incident.units || incident.units.length === 0;
+
+        if (hasNoCallType && hasNoUnits) {
           return false;
         }
       }
@@ -665,7 +683,7 @@ export function IncidentsList({
     });
 
     return filtered;
-  }, [incidents, filters, getDateRange, settings.hideIncompleteIncidents]);
+  }, [incidents, filters, getDateRange, settings.hideIncompleteIncidents, settings.hideIncidentsWithoutUnitsOrCallType]);
 
   const displayedIncidents = useMemo(() => {
     return allFilteredIncidents.sort(
