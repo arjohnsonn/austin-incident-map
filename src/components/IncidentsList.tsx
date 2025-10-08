@@ -297,6 +297,7 @@ const VirtualizedList = memo(
       const isSelected =
         selectedIncident?.traffic_report_id === incident.traffic_report_id;
       const isNew = newIncidentIds.has(incident.traffic_report_id);
+      const hasStagingInstructions = incident.rawTranscript?.includes("Check for possible staging instructions");
 
       visibleItems.push(
         <div
@@ -304,6 +305,8 @@ const VirtualizedList = memo(
           className={`absolute left-0 right-0 cursor-pointer transition-colors border-b border-neutral-300 dark:border-neutral-600 hover:bg-neutral-100 dark:hover:bg-neutral-700 min-w-[800px] ${
             isSelected
               ? "bg-blue-200 dark:bg-blue-800"
+              : hasStagingInstructions
+              ? "bg-red-50 dark:bg-red-950/30"
               : i % 2 === 0
               ? "bg-neutral-50 dark:bg-neutral-900"
               : "bg-white dark:bg-neutral-800"
@@ -399,7 +402,7 @@ const VirtualizedList = memo(
           onScroll={handleScroll}
         >
           {/* Table Header - now inside scrollable area */}
-          <div className="bg-neutral-900 dark:bg-black text-white text-xs font-bold px-2 py-2 border-b-2 border-neutral-600 sticky top-0 z-10 min-w-[800px]">
+          <div className="bg-neutral-200 dark:bg-neutral-900 text-neutral-900 dark:text-white text-xs font-bold px-2 py-2 border-b-2 border-neutral-300 dark:border-neutral-600 sticky top-0 z-10 min-w-[800px]">
             <div className="flex items-center">
               <div style={{ width: columnWidths.play }} className="text-center flex-shrink-0 flex items-center justify-center">
                 <Volume2 className="w-3 h-3" />
@@ -410,28 +413,28 @@ const VirtualizedList = memo(
               <div style={{ width: columnWidths.callType }} className="px-2 flex-shrink-0 relative">
                 CALL TYPE
                 <div
-                  className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-400 bg-neutral-700"
+                  className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-400 bg-neutral-400 dark:bg-neutral-700"
                   onMouseDown={(e) => handleResizeStart(e, 'callType')}
                 />
               </div>
               <div style={{ width: columnWidths.address }} className="px-2 flex-shrink-0 relative">
                 ADDRESS
                 <div
-                  className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-400 bg-neutral-700"
+                  className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-400 bg-neutral-400 dark:bg-neutral-700"
                   onMouseDown={(e) => handleResizeStart(e, 'address')}
                 />
               </div>
               <div style={{ width: columnWidths.units }} className="px-2 flex-shrink-0 relative">
                 UNITS
                 <div
-                  className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-400 bg-neutral-700"
+                  className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-400 bg-neutral-400 dark:bg-neutral-700"
                   onMouseDown={(e) => handleResizeStart(e, 'units')}
                 />
               </div>
               <div style={{ width: columnWidths.channels }} className="px-2 flex-shrink-0 relative">
                 CHANNEL
                 <div
-                  className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-400 bg-neutral-700"
+                  className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-400 bg-neutral-400 dark:bg-neutral-700"
                   onMouseDown={(e) => handleResizeStart(e, 'channels')}
                 />
               </div>
@@ -450,7 +453,7 @@ VirtualizedList.displayName = "VirtualizedList";
 const SkeletonLoader = ({ columnWidths }: { columnWidths: { play: number; time: number; callType: number; address: number; units: number; channels: number } }) => {
   return (
     <div className="flex flex-col">
-      <div className="bg-neutral-900 dark:bg-black text-white text-xs font-bold px-2 py-2 border-b-2 border-neutral-600 sticky top-0 z-10 min-w-[800px]">
+      <div className="bg-neutral-200 dark:bg-neutral-900 text-neutral-900 dark:text-white text-xs font-bold px-2 py-2 border-b-2 border-neutral-300 dark:border-neutral-600 sticky top-0 z-10 min-w-[800px]">
         <div className="flex items-center">
           <div style={{ width: columnWidths.play }} className="text-center flex-shrink-0 flex items-center justify-center">
             <Volume2 className="w-3 h-3" />
