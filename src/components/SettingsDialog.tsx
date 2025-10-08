@@ -43,14 +43,14 @@ export function SettingsDialog({ incidents = [], onReplayIncident }: SettingsDia
           <span className="sr-only">Open settings</span>
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[600px] max-h-[80vh]">
+      <DialogContent className="sm:max-w-[600px] max-h-[80vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Settings</DialogTitle>
           <DialogDescription>
             Configure your incident notification preferences
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-6 py-4">
+        <div className="space-y-6 py-4 overflow-y-auto flex-1">
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
               <label htmlFor="auto-play" className="text-sm font-medium">
@@ -83,6 +83,24 @@ export function SettingsDialog({ incidents = [], onReplayIncident }: SettingsDia
               checked={settings.showBanner}
               onCheckedChange={(checked) =>
                 updateSettings({ showBanner: checked })
+              }
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <label htmlFor="hide-incomplete" className="text-sm font-medium">
+                Hide incomplete incidents
+              </label>
+              <p className="text-sm text-muted-foreground">
+                Hide list entries without a call type or address
+              </p>
+            </div>
+            <Switch
+              id="hide-incomplete"
+              checked={settings.hideIncompleteIncidents}
+              onCheckedChange={(checked) =>
+                updateSettings({ hideIncompleteIncidents: checked })
               }
             />
           </div>

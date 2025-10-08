@@ -13,11 +13,11 @@ import { SettingsDialog } from "@/components/SettingsDialog";
 import { CallBanner } from "@/components/CallBanner";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { useFireIncidents } from "@/lib/api";
-import { useSettings } from "@/lib/settings";
+import { useSettings, SettingsProvider } from "@/lib/settings";
 import { FireIncident } from "@/types/incident";
 import { toast } from "sonner";
 
-export default function Home() {
+function HomeContent() {
   const {
     incidents,
     error,
@@ -177,5 +177,13 @@ export default function Home() {
         </ResizablePanel>
       </ResizablePanelGroup>
     </div>
+  );
+}
+
+export default function Home() {
+  return (
+    <SettingsProvider>
+      <HomeContent />
+    </SettingsProvider>
   );
 }

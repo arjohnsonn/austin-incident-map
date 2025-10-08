@@ -1,8 +1,11 @@
-import { useState, useEffect } from 'react';
+'use client';
+
+import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
 
 export interface AppSettings {
   autoPlayAudio: boolean;
   showBanner: boolean;
+  hideIncompleteIncidents: boolean;
 }
 
 const SETTINGS_KEY = 'app_settings';
@@ -10,9 +13,18 @@ const SETTINGS_KEY = 'app_settings';
 const defaultSettings: AppSettings = {
   autoPlayAudio: false,
   showBanner: true,
+  hideIncompleteIncidents: false,
 };
 
-export function useSettings() {
+interface SettingsContextType {
+  settings: AppSettings;
+  updateSettings: (newSettings: Partial<AppSettings>) => void;
+  isLoaded: boolean;
+}
+
+const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
+
+export function SettingsProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
   const [isLoaded, setIsLoaded] = useState(false);
 
@@ -42,9 +54,17 @@ export function useSettings() {
     });
   };
 
-  return {
-    settings,
-    updateSettings,
-    isLoaded,
-  };
+  return (
+    <SettingsContext.Provider value={{ settings, updateSettings, isLoaded }}>
+      {children}
+    </SettingsContext.Provider>
+  );
+}
+
+export function useSettings() {
+  const context = useContext(SettingsContext);
+  if (context === undefined) {
+    throw new Error('useSettings must be used within a SettingsProvider');
+  }
+  return context;
 }

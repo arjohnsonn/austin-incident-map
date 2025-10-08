@@ -585,6 +585,21 @@ export function IncidentsList({
 
   const allFilteredIncidents = useMemo(() => {
     const filtered = incidents.filter((incident) => {
+      if (settings.hideIncompleteIncidents) {
+        const hasValidCallType = incident.issue_reported &&
+          incident.issue_reported !== 'Nondeterminate' &&
+          incident.issue_reported.trim() !== '';
+
+        const hasValidAddress = incident.location &&
+          incident.location.coordinates &&
+          incident.location.coordinates[0] !== 0 &&
+          incident.location.coordinates[1] !== 0;
+
+        if (!hasValidCallType || !hasValidAddress) {
+          return false;
+        }
+      }
+
       if (filters.search) {
         const searchLower = filters.search.toLowerCase();
         const searchFields = [
@@ -647,7 +662,7 @@ export function IncidentsList({
     });
 
     return filtered;
-  }, [incidents, filters, getDateRange]);
+  }, [incidents, filters, getDateRange, settings.hideIncompleteIncidents]);
 
   const displayedIncidents = useMemo(() => {
     return allFilteredIncidents.sort(
