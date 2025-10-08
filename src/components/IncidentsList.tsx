@@ -54,6 +54,7 @@ const BUFFER_SIZE = 10;
 const VirtualizedList = memo(
   ({
     incidents,
+    allIncidents,
     selectedIncident,
     onIncidentSelect,
     autoPlayAudio,
@@ -62,6 +63,7 @@ const VirtualizedList = memo(
     isInitialStream,
   }: {
     incidents: FireIncident[];
+    allIncidents: FireIncident[];
     selectedIncident: FireIncident | null;
     onIncidentSelect: (incident: FireIncident) => void;
     autoPlayAudio: boolean;
@@ -73,6 +75,7 @@ const VirtualizedList = memo(
     const [containerHeight, setContainerHeight] = useState(600);
     const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
     const audioRef = useRef<HTMLAudioElement | null>(null);
+    const playPromiseRef = useRef<Promise<void> | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const [newIncidentIds, setNewIncidentIds] = useState<Set<string>>(new Set());
     const prevIncidentIdsRef = useRef<Set<string>>(new Set());
@@ -152,26 +155,36 @@ const VirtualizedList = memo(
       }
     };
 
-    const handlePlayAudio = useCallback((e: React.MouseEvent, incident: FireIncident) => {
+    const handlePlayAudio = useCallback(async (e: React.MouseEvent, incident: FireIncident) => {
       e.stopPropagation();
 
       if (!incident.audioUrl) return;
 
       if (playingAudioId === incident.traffic_report_id) {
+        if (playPromiseRef.current) {
+          await playPromiseRef.current.catch(() => {});
+        }
         audioRef.current?.pause();
+        playPromiseRef.current = null;
         setPlayingAudioId(null);
         onAudioStateChange?.(false);
       } else {
         if (audioRef.current) {
+          if (playPromiseRef.current) {
+            await playPromiseRef.current.catch(() => {});
+          }
           audioRef.current.pause();
         }
 
         audioRef.current = new Audio(incident.audioUrl);
-        audioRef.current.play();
+        playPromiseRef.current = audioRef.current.play().catch((error) => {
+          console.error('Playback failed:', error);
+        });
         setPlayingAudioId(incident.traffic_report_id);
         onAudioStateChange?.(true);
 
         audioRef.current.onended = () => {
+          playPromiseRef.current = null;
           setPlayingAudioId(null);
           onAudioStateChange?.(false);
         };
@@ -180,15 +193,19 @@ const VirtualizedList = memo(
 
     useEffect(() => {
       return () => {
-        if (audioRef.current) {
+        if (playPromiseRef.current) {
+          playPromiseRef.current.then(() => {
+            audioRef.current?.pause();
+          }).catch(() => {});
+        } else if (audioRef.current) {
           audioRef.current.pause();
-          onAudioStateChange?.(false);
         }
+        onAudioStateChange?.(false);
       };
     }, [onAudioStateChange]);
 
     useEffect(() => {
-      const currentIds = new Set(incidents.map(inc => inc.traffic_report_id));
+      const currentIds = new Set(allIncidents.map(inc => inc.traffic_report_id));
 
       if (!isInitializedRef.current) {
         isInitializedRef.current = true;
@@ -209,7 +226,7 @@ const VirtualizedList = memo(
           setNewIncidentIds(newIds);
         }
 
-        const newIncidentsArray = incidents.filter(inc => newIds.has(inc.traffic_report_id));
+        const newIncidentsArray = allIncidents.filter(inc => newIds.has(inc.traffic_report_id));
 
         if (newIncidentsArray.length > 0 && !isInitialStream) {
           const mostRecentIncident = newIncidentsArray.sort(
@@ -221,23 +238,31 @@ const VirtualizedList = memo(
           }
 
           if (autoPlayAudio && mostRecentIncident.audioUrl) {
-            if (audioRef.current) {
-              audioRef.current.pause();
-            }
+            const playNewAudio = async () => {
+              if (audioRef.current) {
+                if (playPromiseRef.current) {
+                  await playPromiseRef.current.catch(() => {});
+                }
+                audioRef.current.pause();
+              }
 
-            audioRef.current = new Audio(mostRecentIncident.audioUrl);
-            audioRef.current.play().then(() => {
-              onAudioStateChange?.(true);
-            }).catch((error) => {
-              console.error('Auto-play failed:', error);
-              console.log('Browser blocked auto-play. User interaction required.');
-            });
-            setPlayingAudioId(mostRecentIncident.traffic_report_id);
+              audioRef.current = new Audio(mostRecentIncident.audioUrl);
+              playPromiseRef.current = audioRef.current.play().then(() => {
+                onAudioStateChange?.(true);
+              }).catch((error) => {
+                console.error('Auto-play failed:', error);
+                console.log('Browser blocked auto-play. User interaction required.');
+              });
+              setPlayingAudioId(mostRecentIncident.traffic_report_id);
 
-            audioRef.current.onended = () => {
-              setPlayingAudioId(null);
-              onAudioStateChange?.(false);
+              audioRef.current.onended = () => {
+                playPromiseRef.current = null;
+                setPlayingAudioId(null);
+                onAudioStateChange?.(false);
+              };
             };
+
+            playNewAudio();
           }
         }
 
@@ -254,7 +279,7 @@ const VirtualizedList = memo(
       } else {
         prevIncidentIdsRef.current = currentIds;
       }
-    }, [incidents, autoPlayAudio, onNewIncident, onAudioStateChange, isInitialStream]);
+    }, [allIncidents, autoPlayAudio, onNewIncident, onAudioStateChange, isInitialStream]);
 
 
     const startIndex = Math.max(
@@ -885,6 +910,7 @@ export function IncidentsList({
         ) : (
           <VirtualizedList
             incidents={displayedIncidents}
+            allIncidents={incidents}
             selectedIncident={selectedIncident}
             onIncidentSelect={onIncidentSelect}
             autoPlayAudio={settings.autoPlayAudio}
