@@ -401,7 +401,105 @@ export function useFireIncidents() {
       localStorage.setItem(CACHE_KEY_LASTPOS, lastPosRef.current.toString());
 
       console.log('Total dispatch incidents in memory:', dispatchIncidentsRef.current.length);
-      console.log('=== FETCH END ===\n');
+
+      setIncidents(prev => {
+        const allIncidents = [...dispatchIncidentsRef.current, ...prev];
+
+        const dedupById = Array.from(
+          new Map(allIncidents.map(inc => [inc.traffic_report_id, inc])).values()
+        );
+
+        console.log('\n--- FINAL DEDUPLICATION AFTER STREAMING ---');
+        const sortedByTime = [...dedupById].sort((a, b) =>
+          new Date(b.published_date).getTime() - new Date(a.published_date).getTime()
+        );
+
+        const assignedUnits = new Set<string>();
+        const afterUnitDedup: FireIncident[] = [];
+
+        for (const inc of sortedByTime) {
+          if (!inc.units || inc.units.length === 0) {
+            afterUnitDedup.push(inc);
+            continue;
+          }
+
+          const availableUnits = inc.units.filter(unit => !assignedUnits.has(unit));
+
+          if (availableUnits.length === 0) {
+            continue;
+          }
+
+          afterUnitDedup.push({
+            ...inc,
+            units: availableUnits,
+          });
+
+          availableUnits.forEach(unit => assignedUnits.add(unit));
+        }
+
+        const normalizeCallType = (callType: string) => {
+          return callType.toLowerCase().replace(/[^a-z0-9]/g, '');
+        };
+
+        const seenByCallType = new Map<string, FireIncident[]>();
+        const finalDeduped: FireIncident[] = [];
+
+        for (const inc of afterUnitDedup) {
+          const normalizedCallType = normalizeCallType(inc.issue_reported);
+
+          if (!seenByCallType.has(normalizedCallType)) {
+            seenByCallType.set(normalizedCallType, []);
+          }
+          seenByCallType.get(normalizedCallType)!.push(inc);
+        }
+
+        for (const [, incs] of seenByCallType.entries()) {
+          const incidentsWithAddress = incs.filter(inc => inc.address && inc.address !== '?');
+          const incidentsWithoutAddress = incs.filter(inc => !inc.address || inc.address === '?');
+
+          const grouped = new Map<string, FireIncident[]>();
+
+          for (const inc of incidentsWithAddress) {
+            const normalizedAddress = inc.address.trim().toLowerCase();
+            if (!grouped.has(normalizedAddress)) {
+              grouped.set(normalizedAddress, []);
+            }
+            grouped.get(normalizedAddress)!.push(inc);
+          }
+
+          for (const [, addressIncidents] of grouped.entries()) {
+            const sorted = addressIncidents.sort((a, b) =>
+              new Date(b.published_date).getTime() - new Date(a.published_date).getTime()
+            );
+            finalDeduped.push(sorted[0]);
+          }
+
+          if (incidentsWithoutAddress.length > 0) {
+            const allUnitsInAddressedIncidents = new Set<string>();
+            for (const inc of incidentsWithAddress) {
+              if (inc.units) {
+                inc.units.forEach(unit => allUnitsInAddressedIncidents.add(unit));
+              }
+            }
+
+            for (const inc of incidentsWithoutAddress) {
+              if (!inc.units || inc.units.length === 0) {
+                continue;
+              }
+
+              const hasUniqueUnits = inc.units.some(unit => !allUnitsInAddressedIncidents.has(unit));
+
+              if (hasUniqueUnits) {
+                finalDeduped.push(inc);
+              }
+            }
+          }
+        }
+
+        console.log(`Final dedup: ${dedupById.length} → ${finalDeduped.length} incidents`);
+        console.log('=== FETCH END ===\n');
+        return finalDeduped;
+      });
 
       setLastUpdated(new Date());
       setIsLoading(false);
