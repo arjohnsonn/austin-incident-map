@@ -8,8 +8,9 @@ Real-time emergency incident monitoring and visualization for Austin and Travis 
 - **Real-time Incident Tracking** - Live updates from Austin Open Data Portal and Broadcastify radio calls
 - **Interactive Map** - MapLibre GL-powered map with incident markers, clustering, and user location tracking
 - **Live Dispatch Audio** - Integration with Broadcastify Calls API for live radio communications
-- **AI-Powered Transcript Processing** - OpenAI extracts structured data (addresses, units, call types) from dispatch audio
-- **Smart Geocoding** - Intelligent address parsing with Firebase caching to handle transcription errors
+- **AI-Powered Transcript Processing** - Deepgram transcribes audio, GPT-4o-mini extracts structured data (addresses, units, call types)
+- **Smart Geocoding** - Intelligent address parsing with multiple fallback providers to handle transcription errors
+- **Concurrent Processing** - Parallel batch transcription (20 requests at once) for ultra-fast incident loading
 
 ### User Experience
 - **Split-Panel Interface** - Resizable sidebar with incident list and full-screen map view
@@ -24,6 +25,7 @@ Real-time emergency incident monitoring and visualization for Austin and Travis 
 - **Unit Tracking** - Automatic extraction of responding units (Engine 5, Medic 12, etc.)
 - **Channel Identification** - Parse radio channels and tactical frequencies
 - **Address Normalization** - Handle common OCR/transcription errors in dispatch audio
+- **Priority Sorting** - High-priority incidents processed first for faster display
 
 ## 🏗️ Tech Stack
 
@@ -39,20 +41,22 @@ Real-time emergency incident monitoring and visualization for Austin and Travis 
 **Backend**
 - [Next.js API Routes](https://nextjs.org/docs/app/building-your-application/routing/route-handlers) - Serverless functions
 - [Server-Sent Events (SSE)](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events) - Real-time streaming
-- [OpenAI API](https://platform.openai.com/) - Transcript processing
+- [Deepgram API](https://deepgram.com/) - Speech-to-text transcription (Nova-2 model)
+- [OpenAI API](https://platform.openai.com/) - GPT-4o-mini for transcript parsing
 - [jsonwebtoken](https://github.com/auth0/node-jsonwebtoken) - JWT authentication for Broadcastify
 
 **Data Sources**
 - [Austin Open Data Portal](https://data.austintexas.gov/) - Fire/rescue/traffic incidents
 - [Broadcastify Calls API](https://api.bcfy.io/) - Live radio dispatch audio
-- [Nominatim](https://nominatim.org/) - Geocoding service
-- Firebase - Geocoding cache layer
+- [Nominatim](https://nominatim.org/) - Primary geocoding service
+- [Maps.co](https://maps.co/) - Fallback geocoding with dual-key support
 
 ## 📋 Prerequisites
 
 - **Node.js** 20+ and **pnpm** 9+
 - **Broadcastify API credentials** (API Key ID, Secret, App ID)
-- **OpenAI API key** (for GPT-4 transcript processing)
+- **Deepgram API key** (free tier: 45,000 minutes/month)
+- **OpenAI API key** (for GPT-4o-mini transcript parsing)
 - **Broadcastify account** (username/password for authenticated API access)
 
 ## 🚀 Getting Started
@@ -80,17 +84,18 @@ Create a `.env.local` file in the project root:
 BROADCASTIFY_API_KEY_ID=your_api_key_id
 BROADCASTIFY_API_KEY_SECRET=your_api_key_secret
 BROADCASTIFY_APP_ID=your_app_id
-BROADCASTIFY_USERNAME=your_username
-BROADCASTIFY_PASSWORD=your_password
 
-# OpenAI API Key
+# Deepgram API Key (Free tier available)
+# Obtain from: https://console.deepgram.com/
+DEEPGRAM_API_KEY=your_deepgram_api_key
+
+# OpenAI API Key (for transcript parsing)
 # Obtain from: https://platform.openai.com/api-keys
 OPENAI_API_KEY=sk-your-openai-api-key
 
-# Optional: Firebase Configuration (for geocoding cache)
-FIREBASE_API_KEY=your_firebase_api_key
-FIREBASE_PROJECT_ID=your_firebase_project_id
-FIREBASE_DATABASE_URL=https://your-project.firebaseio.com
+# Optional: Geocoding API Keys (for fallback geocoding)
+GEOCODING_API_KEY=your_mapsco_api_key
+GEOCODING_API_KEY_2=your_mapsco_api_key_2
 ```
 
 ### 4. Run Development Server
@@ -147,11 +152,39 @@ For testing or review:
          │
          ├─► JWT Authentication
          │
-         ├─► Fetch Live Radio Calls
+         ├─► Fetch Live Radio Calls (MP3 URLs)
          │
-         ├─► Process Transcripts (OpenAI)
+         ▼
+┌─────────────────┐
+│ Deepgram API    │
+│ (Transcription) │
+└────────┬────────┘
          │
-         ├─► Geocode Addresses (Nominatim + Cache)
+         ├─► Parallel Batch Processing (20 concurrent)
+         │   ├─ Nova-2 model
+         │   └─ Smart formatting
+         │
+         ▼
+┌─────────────────┐
+│ OpenAI API      │
+│ (GPT-4o-mini)   │
+└────────┬────────┘
+         │
+         ├─► Extract structured data:
+         │   ├─ Call type
+         │   ├─ Units
+         │   ├─ Addresses
+         │   ├─ Channels
+         │   └─ Address variants
+         │
+         ▼
+┌─────────────────┐
+│ Geocoding       │
+│ (Multi-source)  │
+└────────┬────────┘
+         │
+         ├─► Nominatim (primary)
+         ├─► Maps.co (fallback)
          │
          ├─► Stream via SSE
          │
@@ -179,7 +212,7 @@ austin-fire-map/
 │   │   └── api/
 │   │       └── broadcastify/
 │   │           └── live-calls/
-│   │               └── route.ts          # SSE endpoint for live calls
+│   │               └── route.ts          # SSE endpoint with parallel processing
 │   ├── components/
 │   │   ├── IncidentMap.tsx               # MapLibre GL map component
 │   │   ├── IncidentsList.tsx             # Sidebar with filtering
@@ -190,7 +223,7 @@ austin-fire-map/
 │   │   └── ui/                           # shadcn/ui components
 │   ├── lib/
 │   │   ├── api.ts                        # useFireIncidents hook
-│   │   ├── dispatch-parser.ts            # Transcript parsing logic
+│   │   ├── dispatch-parser.ts            # GPT-4o-mini parsing logic
 │   │   ├── broadcastify-jwt.ts           # JWT token generation
 │   │   ├── settings.ts                   # Settings persistence
 │   │   └── utils.ts                      # Utility functions
@@ -215,20 +248,39 @@ Austin/Travis County radio channels (configured in settings):
 - **Medical Dispatch M1**: `2-3419`
 - **Medical Dispatch M2**: `2-3420`
 
-### Geocoding Cache
+### Transcription Processing
 
-The application uses Firebase as a persistent geocoding cache to:
-- Reduce API calls to Nominatim
-- Improve response times
-- Share geocoding results across deployments
+The application uses a two-stage AI pipeline:
 
-Cache key format: `geocode_${normalizedAddress}`
+1. **Deepgram Nova-2** - Converts MP3 audio to text
+   - Real-time speed (~10x faster than Whisper)
+   - Smart formatting and punctuation
+   - Processes directly from URL (no download needed)
+   - Batch processing: 20 concurrent requests
+
+2. **OpenAI GPT-4o-mini** - Extracts structured data from transcript
+   - Call types with proper title case
+   - Unit identification (Engine 5, Medic 12)
+   - Address parsing with error correction
+   - Channel extraction (F-TAC-203)
+   - Address variant generation for geocoding
+
+### Geocoding Strategy
+
+Multi-provider fallback with rate limiting:
+1. **Nominatim** - Primary free service (1 req/sec)
+2. **Maps.co Key 1** - First fallback (1 req/sec)
+3. **Maps.co Key 2** - Second fallback (1 req/sec)
+
+Each provider tries all address variants before moving to next provider.
 
 ### Rate Limiting
 
 - **Broadcastify API**: Maximum 1 request per 5 seconds (enforced by API)
+- **Deepgram API**: 100 concurrent requests (using batch size of 20)
 - **Client Polling**: Configurable interval (default 30 seconds)
-- **OpenAI API**: No explicit limit, uses standard quota
+- **OpenAI API**: Standard quota limits
+- **Nominatim**: 1 request per second (enforced by client)
 
 ## 🛠️ Development
 
@@ -296,16 +348,30 @@ location.reload()
 ### Environment Variables for Production
 
 Ensure all required environment variables are set:
-- Broadcastify credentials (5 variables)
+- Broadcastify credentials (3 variables)
+- Deepgram API key
 - OpenAI API key
-- Optional: Firebase configuration
+- Optional: Maps.co geocoding keys
 
 ### Performance Considerations
 
 - **SSE Connections**: Browser limit of 6 concurrent EventSource connections
 - **Map Tiles**: Consider MapTiler or Mapbox for production tile serving
-- **Geocoding**: Firebase cache reduces load; monitor Nominatim usage
-- **OpenAI Costs**: Monitor token usage; consider rate limiting for high traffic
+- **Geocoding**: Multi-provider fallback reduces dependency on single service
+- **Transcription**: Deepgram free tier provides 45k minutes/month
+- **Parsing**: OpenAI GPT-4o-mini costs ~$0.0001 per call
+- **Batch Processing**: 20 concurrent requests = 10-15x faster initial loads
+
+## 💰 Cost Estimates
+
+For typical usage (monitoring 1-2 channels):
+- **Deepgram**: FREE (45k min/month tier covers ~1500 incidents/day)
+- **OpenAI**: ~$3-5/month (GPT-4o-mini parsing)
+- **Nominatim**: FREE (community service)
+- **Maps.co**: FREE tier or $10/month for higher limits
+- **Vercel**: FREE (Hobby tier sufficient)
+
+**Total**: $0-15/month depending on traffic and geocoding needs
 
 ## 📝 License
 
@@ -331,7 +397,8 @@ For issues and questions:
 
 - **City of Austin** - Open Data Portal
 - **Broadcastify/RadioReference** - Live radio call data
-- **OpenAI** - GPT-4 for transcript processing
+- **Deepgram** - Fast, accurate speech-to-text transcription
+- **OpenAI** - GPT-4o-mini for intelligent transcript parsing
 - **Austin Fire Department** - Emergency response data
 
 ---
