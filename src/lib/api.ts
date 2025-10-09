@@ -2,22 +2,6 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { FireIncident } from '@/types/incident';
 import { supabase, SupabaseIncident } from '@/lib/supabase';
 
-interface RawIncidentData {
-  traffic_report_id: string;
-  published_date: string;
-  issue_reported: string;
-  location?: {
-    type: string;
-    coordinates: [number, number];
-  };
-  latitude: string;
-  longitude: string;
-  address: string;
-  traffic_report_status: 'ACTIVE' | 'ARCHIVED';
-  traffic_report_status_date_time: string;
-  agency: string;
-}
-
 function parseLocation(location: string | null): [number, number] | null {
   if (!location) return null;
 
@@ -190,62 +174,6 @@ async function fetchIncidentsFromSupabase(): Promise<FireIncident[]> {
   } catch (error) {
     console.error('Error fetching incidents:', error);
     return [];
-  }
-}
-
-export async function fetchFireIncidents(): Promise<FireIncident[]> {
-  try {
-    const [fireResponse, trafficResponse] = await Promise.all([
-      fetch(FIRE_API_ENDPOINT, {
-        headers: {
-          'Accept': 'application/json',
-        },
-      }),
-      fetch(TRAFFIC_API_ENDPOINT, {
-        headers: {
-          'Accept': 'application/json',
-        },
-      })
-    ]);
-
-    if (!fireResponse.ok) {
-      throw new Error(`Failed to fetch fire incidents: ${fireResponse.statusText}`);
-    }
-    if (!trafficResponse.ok) {
-      throw new Error(`Failed to fetch traffic incidents: ${trafficResponse.statusText}`);
-    }
-
-    const [fireData, trafficData] = await Promise.all([
-      fireResponse.json(),
-      trafficResponse.json()
-    ]);
-
-    const fireIncidents: FireIncident[] = (fireData as RawIncidentData[]).map(incident => ({
-      ...incident,
-      location: incident.location?.type === 'Point'
-        ? incident.location as { type: 'Point'; coordinates: [number, number] }
-        : {
-            type: 'Point' as const,
-            coordinates: [parseFloat(incident.longitude), parseFloat(incident.latitude)]
-          },
-      incidentType: 'fire' as const
-    }));
-
-    const trafficIncidents: FireIncident[] = (trafficData as RawIncidentData[]).map(incident => ({
-      ...incident,
-      location: incident.location?.type === 'Point'
-        ? incident.location as { type: 'Point'; coordinates: [number, number] }
-        : {
-            type: 'Point' as const,
-            coordinates: [parseFloat(incident.longitude), parseFloat(incident.latitude)]
-          },
-      incidentType: 'traffic' as const
-    }));
-
-    return [...fireIncidents, ...trafficIncidents];
-  } catch (error) {
-    console.error('Error fetching incidents:', error);
-    throw error;
   }
 }
 

@@ -41,8 +41,6 @@ interface IncidentsListProps {
   onAudioStateChange?: (playing: boolean) => void;
   loading?: boolean;
   lastUpdated?: Date | null;
-  processingState?: { total: number; completed: number } | null;
-  isInitialStream?: boolean;
   onRefresh?: () => void;
   onResetStorage?: () => void;
 }
@@ -59,7 +57,6 @@ const VirtualizedList = memo(
     autoPlayAudio,
     onNewIncident,
     onAudioStateChange,
-    isInitialStream,
   }: {
     incidents: FireIncident[];
     allIncidents: FireIncident[];
@@ -68,7 +65,6 @@ const VirtualizedList = memo(
     autoPlayAudio: boolean;
     onNewIncident?: (incident: FireIncident, newIds: Set<string>) => void;
     onAudioStateChange?: (playing: boolean) => void;
-    isInitialStream?: boolean;
   }) => {
     const [scrollTop, setScrollTop] = useState(0);
     const [containerHeight, setContainerHeight] = useState(600);
@@ -221,13 +217,11 @@ const VirtualizedList = memo(
       });
 
       if (newIds.size > 0) {
-        if (!isInitialStream) {
-          setNewIncidentIds(newIds);
-        }
+        setNewIncidentIds(newIds);
 
         const newIncidentsArray = allIncidents.filter(inc => newIds.has(inc.traffic_report_id));
 
-        if (newIncidentsArray.length > 0 && !isInitialStream) {
+        if (newIncidentsArray.length > 0) {
           const mostRecentIncident = newIncidentsArray.sort(
             (a, b) => new Date(b.published_date).getTime() - new Date(a.published_date).getTime()
           )[0];
@@ -265,20 +259,16 @@ const VirtualizedList = memo(
           }
         }
 
-        if (!isInitialStream) {
-          const timer = setTimeout(() => {
-            setNewIncidentIds(new Set());
-          }, 3000);
-
-          prevIncidentIdsRef.current = currentIds;
-          return () => clearTimeout(timer);
-        }
+        const timer = setTimeout(() => {
+          setNewIncidentIds(new Set());
+        }, 3000);
 
         prevIncidentIdsRef.current = currentIds;
+        return () => clearTimeout(timer);
       } else {
         prevIncidentIdsRef.current = currentIds;
       }
-    }, [allIncidents, autoPlayAudio, onNewIncident, onAudioStateChange, isInitialStream]);
+    }, [allIncidents, autoPlayAudio, onNewIncident, onAudioStateChange]);
 
 
     const startIndex = Math.max(
@@ -529,8 +519,6 @@ export function IncidentsList({
   onAudioStateChange,
   loading,
   lastUpdated,
-  processingState,
-  isInitialStream,
   onRefresh,
   onResetStorage,
 }: IncidentsListProps) {
@@ -762,21 +750,13 @@ export function IncidentsList({
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-lg font-semibold">Incidents</h2>
-            {lastUpdated && !processingState && (
+            {lastUpdated && (
               <p className="text-xs text-muted-foreground">
                 Last updated: {getTimeSinceUpdate()}
               </p>
             )}
           </div>
           <div className="flex items-center gap-2">
-            {processingState ? (
-              <div className="flex items-center gap-2 text-xs text-blue-600 dark:text-blue-400 px-3 py-1 bg-blue-50 dark:bg-blue-950 rounded">
-                <RefreshCw className="h-3 w-3 animate-spin" />
-                <span>
-                  {processingState.completed}/{processingState.total}
-                </span>
-              </div>
-            ) : null}
             <Button
               variant="outline"
               size="sm"
@@ -924,7 +904,7 @@ export function IncidentsList({
 
       {/* Incidents List */}
       <div className="flex flex-col flex-1 overflow-hidden">
-        {loading && incidents.length === 0 && !processingState ? (
+        {loading && incidents.length === 0 ? (
           <div className="overflow-auto">
             <SkeletonLoader columnWidths={{
               play: 32,
@@ -935,18 +915,10 @@ export function IncidentsList({
               channels: 110,
             }} />
           </div>
-        ) : allFilteredIncidents.length === 0 && !processingState ? (
+        ) : allFilteredIncidents.length === 0 ? (
           <div className="flex items-center justify-center flex-1">
             <div className="text-center text-neutral-500 py-8">
               No incidents found matching your filters.
-            </div>
-          </div>
-        ) : displayedIncidents.length === 0 && processingState ? (
-          <div className="flex items-center justify-center flex-1">
-            <div className="text-center text-neutral-500 py-8">
-              <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-4 text-blue-600 dark:text-blue-400" />
-              <p className="text-lg font-medium mb-2">Processing first incident...</p>
-              <p className="text-sm">Priority incidents will appear here as they complete</p>
             </div>
           </div>
         ) : (
@@ -958,7 +930,6 @@ export function IncidentsList({
             autoPlayAudio={settings.autoPlayAudio}
             onNewIncident={onNewIncident}
             onAudioStateChange={onAudioStateChange}
-            isInitialStream={isInitialStream}
           />
         )}
       </div>
