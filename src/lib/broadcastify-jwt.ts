@@ -47,8 +47,12 @@ export async function authenticateUser(): Promise<AuthenticatedUser> {
     return cachedAuth;
   }
 
-  const username = 'motion42069';
-  const password = 'ef7a0n5a5ml';
+  const username = process.env.BROADCASTIFY_USERNAME;
+  const password = process.env.BROADCASTIFY_PASSWORD;
+
+  if (!username || !password) {
+    throw new Error('Broadcastify credentials not configured. Need BROADCASTIFY_USERNAME and BROADCASTIFY_PASSWORD');
+  }
 
   const authJWT = generateBroadcastifyJWT();
 
