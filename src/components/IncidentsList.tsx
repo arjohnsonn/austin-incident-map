@@ -33,6 +33,7 @@ import {
   IncidentStatus,
   DateRange,
 } from "@/types/incident";
+import { removeUnitsFromOlderIncidents } from "@/lib/api";
 
 interface IncidentsListProps {
   incidents: FireIncident[];
@@ -688,12 +689,18 @@ export function IncidentsList({
   }, [incidents, filters, getDateRange, settings.hideIncompleteIncidents, settings.hideIncidentsWithoutUnitsOrCallType]);
 
   const displayedIncidents = useMemo(() => {
-    return allFilteredIncidents.sort(
+    const sorted = allFilteredIncidents.sort(
       (a, b) =>
         new Date(b.published_date).getTime() -
         new Date(a.published_date).getTime()
     );
-  }, [allFilteredIncidents]);
+
+    if (filters.dateRange === "DYNAMIC") {
+      return removeUnitsFromOlderIncidents(sorted);
+    }
+
+    return sorted;
+  }, [allFilteredIncidents, filters.dateRange]);
 
 
   useEffect(() => {

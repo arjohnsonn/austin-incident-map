@@ -66,29 +66,6 @@ function deduplicateIncidents(incidents: FireIncident[]): FireIncident[] {
     new Date(b.published_date).getTime() - new Date(a.published_date).getTime()
   );
 
-  const assignedUnits = new Set<string>();
-  const afterUnitDedup: FireIncident[] = [];
-
-  for (const inc of sortedByTime) {
-    if (!inc.units || inc.units.length === 0) {
-      afterUnitDedup.push(inc);
-      continue;
-    }
-
-    const availableUnits = inc.units.filter(unit => !assignedUnits.has(unit));
-
-    if (availableUnits.length === 0) {
-      continue;
-    }
-
-    afterUnitDedup.push({
-      ...inc,
-      units: availableUnits,
-    });
-
-    availableUnits.forEach(unit => assignedUnits.add(unit));
-  }
-
   const normalizeCallType = (callType: string) => {
     return callType.toLowerCase().replace(/[^a-z0-9]/g, '');
   };
@@ -101,7 +78,7 @@ function deduplicateIncidents(incidents: FireIncident[]): FireIncident[] {
   const seenByCallType = new Map<string, FireIncident[]>();
   const finalDeduped: FireIncident[] = [];
 
-  for (const inc of afterUnitDedup) {
+  for (const inc of sortedByTime) {
     const normalizedCallType = normalizeCallType(inc.issue_reported);
 
     if (!seenByCallType.has(normalizedCallType)) {
@@ -154,6 +131,37 @@ function deduplicateIncidents(incidents: FireIncident[]): FireIncident[] {
   }
 
   return finalDeduped;
+}
+
+export function removeUnitsFromOlderIncidents(incidents: FireIncident[]): FireIncident[] {
+  const sortedByTime = [...incidents].sort((a, b) =>
+    new Date(b.published_date).getTime() - new Date(a.published_date).getTime()
+  );
+
+  const assignedUnits = new Set<string>();
+  const result: FireIncident[] = [];
+
+  for (const inc of sortedByTime) {
+    if (!inc.units || inc.units.length === 0) {
+      result.push(inc);
+      continue;
+    }
+
+    const availableUnits = inc.units.filter(unit => !assignedUnits.has(unit));
+
+    if (availableUnits.length === 0) {
+      continue;
+    }
+
+    result.push({
+      ...inc,
+      units: availableUnits,
+    });
+
+    availableUnits.forEach(unit => assignedUnits.add(unit));
+  }
+
+  return result;
 }
 
 async function fetchIncidentsFromSupabase(): Promise<FireIncident[]> {
