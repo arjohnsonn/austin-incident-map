@@ -4,6 +4,8 @@ import { useState, useMemo, memo, useRef, useEffect, useCallback } from "react";
 import { format } from "date-fns";
 import { Search, Calendar, RefreshCw, Play, Pause, Trash2, Volume2 } from "lucide-react";
 import { useSettings } from "@/lib/settings";
+import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
+import { IncidentCard } from "@/components/IncidentCard";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -525,6 +527,7 @@ export function IncidentsList({
   onResetStorage,
 }: IncidentsListProps) {
   const { settings } = useSettings();
+  const isMobile = useMediaQuery("(max-width: 768px)");
   const [filters, setFilters] = useState<FilterState>({
     search: "",
     status: "ACTIVE",
@@ -536,6 +539,9 @@ export function IncidentsList({
 
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const playPromiseRef = useRef<Promise<void> | null>(null);
 
 
   const getDateRange = useCallback((range: DateRange) => {
@@ -714,6 +720,45 @@ export function IncidentsList({
     });
   };
 
+  const handlePlayAudio = useCallback(
+    async (e: React.MouseEvent, incident: FireIncident) => {
+      e.stopPropagation();
+
+      if (!incident.audioUrl) return;
+
+      if (playingAudioId === incident.traffic_report_id) {
+        if (playPromiseRef.current) {
+          await playPromiseRef.current.catch(() => {});
+        }
+        audioRef.current?.pause();
+        playPromiseRef.current = null;
+        setPlayingAudioId(null);
+        onAudioStateChange?.(false);
+      } else {
+        if (audioRef.current) {
+          if (playPromiseRef.current) {
+            await playPromiseRef.current.catch(() => {});
+          }
+          audioRef.current.pause();
+        }
+
+        audioRef.current = new Audio(incident.audioUrl);
+        playPromiseRef.current = audioRef.current.play().catch((error) => {
+          console.error("Playback failed:", error);
+        });
+        setPlayingAudioId(incident.traffic_report_id);
+        onAudioStateChange?.(true);
+
+        audioRef.current.onended = () => {
+          playPromiseRef.current = null;
+          setPlayingAudioId(null);
+          onAudioStateChange?.(false);
+        };
+      }
+    },
+    [playingAudioId, onAudioStateChange]
+  );
+
 
 
   useEffect(() => {
@@ -748,45 +793,48 @@ export function IncidentsList({
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="p-4 border-b space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-semibold">Incidents</h2>
+      <div className="p-3 md:p-4 border-b space-y-3 md:space-y-4">
+        <div className="flex items-start md:items-center justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <h2 className="text-base md:text-lg font-semibold">Incidents</h2>
             {lastUpdated && (
               <p className="text-xs text-muted-foreground">
                 Last updated: {getTimeSinceUpdate()}
               </p>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-shrink-0">
             <Button
               variant="outline"
               size="sm"
               onClick={onRefresh}
               disabled={loading}
-              className="gap-2"
+              className="gap-1 md:gap-2 min-w-11 md:min-w-0"
             >
               <RefreshCw
                 className={`h-3 w-3 ${loading ? "animate-spin" : ""}`}
               />
-              Refresh
+              <span className="hidden md:inline">Refresh</span>
             </Button>
             <Button
               variant="outline"
               size="sm"
               onClick={onResetStorage}
               disabled={loading}
-              className="gap-2"
+              className="gap-1 md:gap-2 min-w-11 md:min-w-0"
               title="Clear cache and reload data"
             >
               <Trash2 className="h-3 w-3" />
-              Reset
+              <span className="hidden md:inline">Reset</span>
             </Button>
-            <span className="bg-neutral-200 dark:bg-neutral-700 px-2 py-1 rounded text-xs font-medium">
+            <span className="bg-neutral-200 dark:bg-neutral-700 px-2 py-1 rounded text-xs font-medium hidden md:inline">
               {displayedIncidents.length} incidents
             </span>
           </div>
         </div>
+        <span className="bg-neutral-200 dark:bg-neutral-700 px-2 py-1 rounded text-xs font-medium md:hidden inline-block">
+          {displayedIncidents.length} incidents
+        </span>
 
         {/* Search */}
         <div className="relative">
@@ -809,7 +857,7 @@ export function IncidentsList({
               setFilters((prev) => ({ ...prev, status: value }))
             }
           >
-            <SelectTrigger className="w-32">
+            <SelectTrigger className="w-24 md:w-32 min-h-11">
               <SelectValue placeholder="Status" />
             </SelectTrigger>
             <SelectContent>
@@ -825,7 +873,7 @@ export function IncidentsList({
               setFilters((prev) => ({ ...prev, agency: value }))
             }
           >
-            <SelectTrigger className="w-32">
+            <SelectTrigger className="w-24 md:w-32 min-h-11">
               <SelectValue placeholder="Agency" />
             </SelectTrigger>
             <SelectContent>
@@ -844,7 +892,7 @@ export function IncidentsList({
               setFilters((prev) => ({ ...prev, dateRange: value }))
             }
           >
-            <SelectTrigger className="w-32">
+            <SelectTrigger className="w-28 md:w-32 min-h-11">
               <SelectValue placeholder="Date Range" />
             </SelectTrigger>
             <SelectContent>
@@ -862,7 +910,7 @@ export function IncidentsList({
           {filters.dateRange === "CUSTOM" && (
             <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
               <PopoverTrigger asChild>
-                <Button variant="outline" size="sm" className="gap-2">
+                <Button variant="outline" size="sm" className="gap-2 min-h-11">
                   <Calendar className="h-4 w-4" />
                   {filters.startDate
                     ? format(filters.startDate, "MMM dd")
@@ -897,7 +945,7 @@ export function IncidentsList({
             filters.dateRange !== "DYNAMIC" ||
             filters.startDate ||
             filters.endDate) && (
-            <Button variant="ghost" size="sm" onClick={clearFilters}>
+            <Button variant="ghost" size="sm" onClick={clearFilters} className="min-h-11">
               Clear
             </Button>
           )}
@@ -908,20 +956,47 @@ export function IncidentsList({
       <div className="flex flex-col flex-1 overflow-hidden">
         {loading && incidents.length === 0 ? (
           <div className="overflow-auto">
-            <SkeletonLoader columnWidths={{
-              play: 32,
-              time: 80,
-              callType: 168,
-              address: 192,
-              units: 128,
-              channels: 110,
-            }} />
+            {isMobile ? (
+              <div className="p-4 space-y-3">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <Skeleton key={i} className="h-24 w-full" />
+                ))}
+              </div>
+            ) : (
+              <SkeletonLoader
+                columnWidths={{
+                  play: 32,
+                  time: 80,
+                  callType: 168,
+                  address: 192,
+                  units: 128,
+                  channels: 110,
+                }}
+              />
+            )}
           </div>
         ) : allFilteredIncidents.length === 0 ? (
           <div className="flex items-center justify-center flex-1">
             <div className="text-center text-neutral-500 py-8">
               No incidents found matching your filters.
             </div>
+          </div>
+        ) : isMobile ? (
+          <div className="overflow-auto p-4 space-y-3">
+            {displayedIncidents.map((incident) => (
+              <IncidentCard
+                key={incident.traffic_report_id}
+                incident={incident}
+                isSelected={
+                  selectedIncident?.traffic_report_id ===
+                  incident.traffic_report_id
+                }
+                isNew={false}
+                isPlaying={playingAudioId === incident.traffic_report_id}
+                onSelect={onIncidentSelect}
+                onPlayAudio={handlePlayAudio}
+              />
+            ))}
           </div>
         ) : (
           <VirtualizedList

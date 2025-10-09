@@ -6,6 +6,7 @@ import {
   ResizablePanel,
   ResizableHandle,
 } from "@/components/ui/resizable";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { IncidentMap } from "@/components/IncidentMap";
 import { IncidentsList } from "@/components/IncidentsList";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -13,6 +14,7 @@ import { SettingsDialog } from "@/components/SettingsDialog";
 import { CallBanner } from "@/components/CallBanner";
 import { useFireIncidents } from "@/lib/api";
 import { useSettings, SettingsProvider } from "@/lib/settings";
+import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { FireIncident } from "@/types/incident";
 import { toast } from "sonner";
 
@@ -27,6 +29,7 @@ function HomeContent() {
     resetStorage,
   } = useFireIncidents();
   const { settings } = useSettings();
+  const isMobile = useMediaQuery("(max-width: 768px)");
   const [selectedIncident, setSelectedIncident] = useState<FireIncident | null>(
     null
   );
@@ -126,15 +129,17 @@ function HomeContent() {
         onComplete={() => setBannerIncident(null)}
         isAudioPlaying={isAudioPlaying}
       />
-      <header className="border-b px-6 py-4">
+      <header className="border-b px-4 py-2 md:px-6 md:py-4">
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold">Austin Fire Department Map</h1>
-            <p className="text-muted-foreground">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-xl md:text-2xl font-bold truncate">
+              Austin Fire Department Map
+            </h1>
+            <p className="text-muted-foreground text-sm hidden md:block">
               Real-time Austin Fire Department incidents with unit tracking
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-shrink-0">
             <SettingsDialog
               incidents={incidents}
               onReplayIncident={handleReplayIncident}
@@ -144,33 +149,68 @@ function HomeContent() {
         </div>
       </header>
 
-      <ResizablePanelGroup direction="horizontal" className="flex-1">
-        <ResizablePanel defaultSize={55} minSize={40}>
-          <IncidentsList
-            incidents={finalIncidents}
-            selectedIncident={selectedIncident}
-            onIncidentSelect={setSelectedIncident}
-            onDisplayedIncidentsChange={handleDisplayedIncidentsChange}
-            onNewIncident={handleNewIncident}
-            onAudioStateChange={handleAudioStateChange}
-            loading={isLoading}
-            lastUpdated={lastUpdated}
-            onRefresh={refetch}
-            onResetStorage={resetStorage}
-          />
-        </ResizablePanel>
+{isMobile ? (
+        <Tabs defaultValue="list" className="flex-1 flex flex-col">
+          <TabsList className="w-full rounded-none border-b h-12">
+            <TabsTrigger value="list" className="flex-1 h-full">
+              Incidents
+            </TabsTrigger>
+            <TabsTrigger value="map" className="flex-1 h-full">
+              Map
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="list" className="flex-1 m-0 overflow-hidden">
+            <IncidentsList
+              incidents={finalIncidents}
+              selectedIncident={selectedIncident}
+              onIncidentSelect={setSelectedIncident}
+              onDisplayedIncidentsChange={handleDisplayedIncidentsChange}
+              onNewIncident={handleNewIncident}
+              onAudioStateChange={handleAudioStateChange}
+              loading={isLoading}
+              lastUpdated={lastUpdated}
+              onRefresh={refetch}
+              onResetStorage={resetStorage}
+            />
+          </TabsContent>
+          <TabsContent value="map" className="flex-1 m-0 overflow-hidden">
+            <IncidentMap
+              incidents={displayedIncidents}
+              selectedIncident={selectedIncident}
+              onIncidentSelect={setSelectedIncident}
+              newIncidentIds={newIncidentIds}
+            />
+          </TabsContent>
+        </Tabs>
+      ) : (
+        <ResizablePanelGroup direction="horizontal" className="flex-1">
+          <ResizablePanel defaultSize={55} minSize={40}>
+            <IncidentsList
+              incidents={finalIncidents}
+              selectedIncident={selectedIncident}
+              onIncidentSelect={setSelectedIncident}
+              onDisplayedIncidentsChange={handleDisplayedIncidentsChange}
+              onNewIncident={handleNewIncident}
+              onAudioStateChange={handleAudioStateChange}
+              loading={isLoading}
+              lastUpdated={lastUpdated}
+              onRefresh={refetch}
+              onResetStorage={resetStorage}
+            />
+          </ResizablePanel>
 
-        <ResizableHandle withHandle />
+          <ResizableHandle withHandle />
 
-        <ResizablePanel defaultSize={45} minSize={30}>
-          <IncidentMap
-            incidents={displayedIncidents}
-            selectedIncident={selectedIncident}
-            onIncidentSelect={setSelectedIncident}
-            newIncidentIds={newIncidentIds}
-          />
-        </ResizablePanel>
-      </ResizablePanelGroup>
+          <ResizablePanel defaultSize={45} minSize={30}>
+            <IncidentMap
+              incidents={displayedIncidents}
+              selectedIncident={selectedIncident}
+              onIncidentSelect={setSelectedIncident}
+              newIncidentIds={newIncidentIds}
+            />
+          </ResizablePanel>
+        </ResizablePanelGroup>
+      )}
     </div>
   );
 }
