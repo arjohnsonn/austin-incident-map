@@ -57,6 +57,7 @@ const VirtualizedList = memo(
     autoPlayAudio,
     onNewIncident,
     onAudioStateChange,
+    loading,
   }: {
     incidents: FireIncident[];
     allIncidents: FireIncident[];
@@ -65,6 +66,7 @@ const VirtualizedList = memo(
     autoPlayAudio: boolean;
     onNewIncident?: (incident: FireIncident, newIds: Set<string>) => void;
     onAudioStateChange?: (playing: boolean) => void;
+    loading?: boolean;
   }) => {
     const [scrollTop, setScrollTop] = useState(0);
     const [containerHeight, setContainerHeight] = useState(600);
@@ -202,7 +204,7 @@ const VirtualizedList = memo(
     useEffect(() => {
       const currentIds = new Set(allIncidents.map(inc => inc.traffic_report_id));
 
-      if (!isInitializedRef.current) {
+      if (!isInitializedRef.current || loading) {
         isInitializedRef.current = true;
         prevIncidentIdsRef.current = currentIds;
         return;
@@ -268,7 +270,7 @@ const VirtualizedList = memo(
       } else {
         prevIncidentIdsRef.current = currentIds;
       }
-    }, [allIncidents, autoPlayAudio, onNewIncident, onAudioStateChange]);
+    }, [allIncidents, autoPlayAudio, onNewIncident, onAudioStateChange, loading]);
 
 
     const startIndex = Math.max(
@@ -930,6 +932,7 @@ export function IncidentsList({
             autoPlayAudio={settings.autoPlayAudio}
             onNewIncident={onNewIncident}
             onAudioStateChange={onAudioStateChange}
+            loading={loading}
           />
         )}
       </div>
