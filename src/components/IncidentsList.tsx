@@ -350,7 +350,15 @@ const VirtualizedList = memo(
               />
             </div>
             <div style={{ width: columnWidths.address }} className="px-2 truncate text-neutral-600 dark:text-neutral-400 flex-shrink-0 relative group">
-              {incident.location ? incident.address : '?'}
+              {(() => {
+                const hasValidCoords = incident.location?.coordinates &&
+                  incident.location.coordinates[0] !== 0 &&
+                  incident.location.coordinates[1] !== 0;
+
+                if (!incident.location) return '?';
+                if (!hasValidCoords) return `${incident.address} (?)`;
+                return incident.address;
+              })()}
               <div
                 className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-500 opacity-0 group-hover:opacity-100"
                 onMouseDown={(e) => handleResizeStart(e, 'address')}
