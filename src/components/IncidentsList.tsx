@@ -206,7 +206,7 @@ const VirtualizedList = memo(
     useEffect(() => {
       const currentIds = new Set(allIncidents.map(inc => inc.traffic_report_id));
 
-      if (!isInitializedRef.current || loading) {
+      if (!isInitializedRef.current) {
         isInitializedRef.current = true;
         prevIncidentIdsRef.current = currentIds;
         return;
@@ -272,7 +272,7 @@ const VirtualizedList = memo(
       } else {
         prevIncidentIdsRef.current = currentIds;
       }
-    }, [allIncidents, autoPlayAudio, onNewIncident, onAudioStateChange, loading]);
+    }, [allIncidents, autoPlayAudio, onNewIncident, onAudioStateChange]);
 
 
     const startIndex = Math.max(
