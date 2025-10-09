@@ -260,7 +260,12 @@ Deno.serve(async (req) => {
     const auth = await authenticateUser();
     const jwt = await generateBroadcastifyJWT(auth.uid, auth.token);
 
-    const url = `${BROADCASTIFY_LIVE_ENDPOINT}?groups=${GROUP_ID}&pos=${lastPos}`;
+    const isFirstRun = lastPos === 0;
+    const url = isFirstRun
+      ? `${BROADCASTIFY_LIVE_ENDPOINT}?groups=${GROUP_ID}&init=1`
+      : `${BROADCASTIFY_LIVE_ENDPOINT}?groups=${GROUP_ID}&pos=${lastPos}`;
+
+    console.log(isFirstRun ? '🔄 INITIAL RUN - Fetching last 25 calls with init=1' : '📡 Incremental update with pos parameter');
     console.log('Fetching live calls from:', url);
 
     const response = await fetch(url, {
