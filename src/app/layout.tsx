@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Austin Incident Map",
+  title: "Austin Fire Department Map",
   description: "Real-time Austin Fire Department incidents with unit tracking",
 };
 

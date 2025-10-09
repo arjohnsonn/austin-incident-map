@@ -37,23 +37,23 @@ function HomeContent() {
     null
   );
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
-  const [replayingIncident, setReplayingIncident] = useState<FireIncident | null>(
-    null
-  );
-  const [replayInjectedIncidents, setReplayInjectedIncidents] = useState<FireIncident[]>(
-    []
-  );
+  const [replayingIncident, setReplayingIncident] =
+    useState<FireIncident | null>(null);
+  const [replayInjectedIncidents, setReplayInjectedIncidents] = useState<
+    FireIncident[]
+  >([]);
   const [newIncidentIds, setNewIncidentIds] = useState<Set<string>>(new Set());
 
   const finalIncidents = useMemo(() => {
     const idsToFilter = new Set([
       ...(replayingIncident ? [replayingIncident.traffic_report_id] : []),
-      ...replayInjectedIncidents.map(inc => inc.traffic_report_id)
+      ...replayInjectedIncidents.map((inc) => inc.traffic_report_id),
     ]);
 
-    const filtered = idsToFilter.size > 0
-      ? incidents.filter((inc) => !idsToFilter.has(inc.traffic_report_id))
-      : incidents;
+    const filtered =
+      idsToFilter.size > 0
+        ? incidents.filter((inc) => !idsToFilter.has(inc.traffic_report_id))
+        : incidents;
 
     return [...replayInjectedIncidents, ...filtered];
   }, [incidents, replayingIncident, replayInjectedIncidents]);
@@ -83,24 +83,27 @@ function HomeContent() {
     setIsAudioPlaying(playing);
   }, []);
 
-  const handleReplayIncident = useCallback((incident: FireIncident) => {
-    if (replayingIncident) {
-      toast.error("A replay is already in progress");
-      return;
-    }
+  const handleReplayIncident = useCallback(
+    (incident: FireIncident) => {
+      if (replayingIncident) {
+        toast.error("A replay is already in progress");
+        return;
+      }
 
-    setReplayingIncident(incident);
-    setReplayInjectedIncidents([]);
-
-    setTimeout(() => {
-      setReplayInjectedIncidents([incident]);
-      setReplayingIncident(null);
-    }, 3000);
-
-    setTimeout(() => {
+      setReplayingIncident(incident);
       setReplayInjectedIncidents([]);
-    }, 10000);
-  }, [replayingIncident]);
+
+      setTimeout(() => {
+        setReplayInjectedIncidents([incident]);
+        setReplayingIncident(null);
+      }, 3000);
+
+      setTimeout(() => {
+        setReplayInjectedIncidents([]);
+      }, 10000);
+    },
+    [replayingIncident]
+  );
 
   useEffect(() => {
     if (isManualRefresh && lastUpdated) {
@@ -126,7 +129,7 @@ function HomeContent() {
       <header className="border-b px-6 py-4">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold">Austin Incident Map</h1>
+            <h1 className="text-2xl font-bold">Austin Fire Department Map</h1>
             <p className="text-muted-foreground">
               Real-time Austin Fire Department incidents with unit tracking
             </p>
