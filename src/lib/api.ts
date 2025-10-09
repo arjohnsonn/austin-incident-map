@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { FireIncident } from '@/types/incident';
-import { DispatchIncident } from '@/types/broadcastify';
+import { supabase, SupabaseIncident } from '@/lib/supabase';
 
 interface RawIncidentData {
   traffic_report_id: string;
@@ -18,146 +18,179 @@ interface RawIncidentData {
   agency: string;
 }
 
-interface BroadcastifyResponse {
-  incidents: DispatchIncident[];
-  lastPos: number;
-  serverTime: number;
+function parseLocation(location: string | null): [number, number] | null {
+  if (!location) return null;
+
+  if (location.startsWith('POINT(')) {
+    const match = location.match(/POINT\(([^\s]+)\s+([^\s]+)\)/);
+    if (!match) return null;
+    return [parseFloat(match[1]), parseFloat(match[2])];
+  }
+
+  if (location.startsWith('0101000020')) {
+    try {
+      const buffer = new Uint8Array(location.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
+      const view = new DataView(buffer.buffer);
+
+      const byteOrder = view.getUint8(0);
+      const littleEndian = byteOrder === 1;
+
+      const srid = view.getUint32(1, littleEndian);
+      const lon = view.getFloat64(9, littleEndian);
+      const lat = view.getFloat64(17, littleEndian);
+
+      return [lon, lat];
+    } catch (error) {
+      console.error('Error parsing WKB location:', error);
+      return null;
+    }
+  }
+
+  return null;
 }
 
-const FIRE_API_ENDPOINT = 'https://data.austintexas.gov/resource/wpu4-x69d.json?$order=published_date DESC&$limit=1000';
-const TRAFFIC_API_ENDPOINT = 'https://data.austintexas.gov/resource/dx9v-zd7x.json?$order=published_date DESC&$limit=1000';
+function convertSupabaseToFireIncident(incident: SupabaseIncident): FireIncident {
+  const coordinates = parseLocation(incident.location);
 
-interface StreamingCallbacks {
-  onProgress?: (completed: number, total: number) => void;
-  onIncident?: (incident: FireIncident) => void;
-  onComplete?: (summary: { processed: number; skipped: number }) => void;
+  return {
+    traffic_report_id: incident.external_id,
+    published_date: incident.timestamp,
+    issue_reported: incident.call_type,
+    location: coordinates ? {
+      type: 'Point',
+      coordinates,
+    } : {
+      type: 'Point',
+      coordinates: [0, 0],
+    },
+    latitude: coordinates ? coordinates[1].toString() : '0',
+    longitude: coordinates ? coordinates[0].toString() : '0',
+    address: incident.address,
+    traffic_report_status: 'ACTIVE' as const,
+    traffic_report_status_date_time: incident.timestamp,
+    agency: 'Austin Fire Department',
+    incidentType: incident.incident_type,
+    units: incident.units,
+    channels: incident.channels,
+    audioUrl: incident.audio_url || undefined,
+    rawTranscript: incident.raw_transcript || undefined,
+    estimatedResolutionMinutes: incident.estimated_resolution_minutes || undefined,
+  };
 }
 
-async function fetchBroadcastifyLiveCallsStreaming(
-  lastPos: number | undefined,
-  init: boolean,
-  callbacks: StreamingCallbacks
-): Promise<{ incidents: FireIncident[]; lastPos: number }> {
-  return new Promise((resolve, reject) => {
-    let url = '/api/broadcastify/live-calls?stream=1';
-    if (init) {
-      url += '&init=1';
-    } else if (lastPos && lastPos > 0) {
-      url += `&pos=${lastPos}`;
-    } else {
-      url += '&init=1';
+function deduplicateIncidents(incidents: FireIncident[]): FireIncident[] {
+  const sortedByTime = [...incidents].sort((a, b) =>
+    new Date(b.published_date).getTime() - new Date(a.published_date).getTime()
+  );
+
+  const assignedUnits = new Set<string>();
+  const afterUnitDedup: FireIncident[] = [];
+
+  for (const inc of sortedByTime) {
+    if (!inc.units || inc.units.length === 0) {
+      afterUnitDedup.push(inc);
+      continue;
     }
 
-    const eventSource = new EventSource(url);
-    const incidents: FireIncident[] = [];
-    let finalLastPos = lastPos || 0;
-    let totalCalls = 0;
+    const availableUnits = inc.units.filter(unit => !assignedUnits.has(unit));
 
-    eventSource.addEventListener('metadata', (e) => {
-      const data = JSON.parse(e.data);
-      finalLastPos = data.lastPos;
-      totalCalls = data.totalCalls;
-      console.log(`Streaming: ${totalCalls} calls to process`);
+    if (availableUnits.length === 0) {
+      continue;
+    }
+
+    afterUnitDedup.push({
+      ...inc,
+      units: availableUnits,
     });
 
-    eventSource.addEventListener('progress', (e) => {
-      const data = JSON.parse(e.data);
-      callbacks.onProgress?.(data.completed, data.total);
-    });
+    availableUnits.forEach(unit => assignedUnits.add(unit));
+  }
 
-    eventSource.addEventListener('incident', (e) => {
-      const dispatchIncident = JSON.parse(e.data);
-      const timestamp = typeof dispatchIncident.timestamp === 'string'
-        ? new Date(dispatchIncident.timestamp)
-        : dispatchIncident.timestamp;
+  const normalizeCallType = (callType: string) => {
+    return callType.toLowerCase().replace(/[^a-z0-9]/g, '');
+  };
 
-      const incident: FireIncident = {
-        traffic_report_id: dispatchIncident.id,
-        published_date: timestamp.toISOString(),
-        issue_reported: dispatchIncident.callType,
-        location: dispatchIncident.location,
-        latitude: dispatchIncident.location?.coordinates?.[1]?.toString() || '0',
-        longitude: dispatchIncident.location?.coordinates?.[0]?.toString() || '0',
-        address: dispatchIncident.address,
-        traffic_report_status: 'ACTIVE' as const,
-        traffic_report_status_date_time: timestamp.toISOString(),
-        agency: 'Austin Fire Department',
-        incidentType: dispatchIncident.incidentType,
-        units: dispatchIncident.units,
-        channels: dispatchIncident.channels,
-        audioUrl: dispatchIncident.audioUrl,
-        rawTranscript: dispatchIncident.rawTranscript,
-        estimatedResolutionMinutes: dispatchIncident.estimatedResolutionMinutes,
-      };
+  const normalizeAddress = (addr: string) => {
+    if (!addr || addr === '?') return '';
+    return addr.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
+  };
 
-      incidents.push(incident);
-      callbacks.onIncident?.(incident);
-    });
+  const seenByCallType = new Map<string, FireIncident[]>();
+  const finalDeduped: FireIncident[] = [];
 
-    eventSource.addEventListener('complete', (e) => {
-      const data = JSON.parse(e.data);
-      callbacks.onComplete?.(data);
-      eventSource.close();
-      resolve({ incidents, lastPos: finalLastPos });
-    });
+  for (const inc of afterUnitDedup) {
+    const normalizedCallType = normalizeCallType(inc.issue_reported);
 
-    eventSource.onerror = (error) => {
-      console.error('EventSource error:', error);
-      eventSource.close();
-      reject(new Error('Streaming connection failed'));
-    };
-  });
+    if (!seenByCallType.has(normalizedCallType)) {
+      seenByCallType.set(normalizedCallType, []);
+    }
+    seenByCallType.get(normalizedCallType)!.push(inc);
+  }
+
+  for (const [, incs] of seenByCallType.entries()) {
+    const incidentsWithAddress = incs.filter(inc => inc.address && inc.address !== '?');
+    const incidentsWithoutAddress = incs.filter(inc => !inc.address || inc.address === '?');
+
+    const grouped = new Map<string, FireIncident[]>();
+
+    for (const inc of incidentsWithAddress) {
+      const normalizedAddr = normalizeAddress(inc.address);
+      if (!grouped.has(normalizedAddr)) {
+        grouped.set(normalizedAddr, []);
+      }
+      grouped.get(normalizedAddr)!.push(inc);
+    }
+
+    for (const [, addressIncidents] of grouped.entries()) {
+      const sorted = addressIncidents.sort((a, b) =>
+        new Date(b.published_date).getTime() - new Date(a.published_date).getTime()
+      );
+      finalDeduped.push(sorted[0]);
+    }
+
+    if (incidentsWithoutAddress.length > 0) {
+      const allUnitsInAddressedIncidents = new Set<string>();
+      for (const inc of incidentsWithAddress) {
+        if (inc.units) {
+          inc.units.forEach(unit => allUnitsInAddressedIncidents.add(unit));
+        }
+      }
+
+      for (const inc of incidentsWithoutAddress) {
+        if (!inc.units || inc.units.length === 0) {
+          continue;
+        }
+
+        const hasUniqueUnits = inc.units.some(unit => !allUnitsInAddressedIncidents.has(unit));
+
+        if (hasUniqueUnits) {
+          finalDeduped.push(inc);
+        }
+      }
+    }
+  }
+
+  return finalDeduped;
 }
 
-async function fetchBroadcastifyLiveCalls(lastPos?: number, init?: boolean): Promise<{ incidents: FireIncident[]; lastPos: number }> {
+async function fetchIncidentsFromSupabase(): Promise<FireIncident[]> {
   try {
-    let url = '/api/broadcastify/live-calls';
+    const { data, error } = await supabase
+      .from('incidents')
+      .select('id, call_type, address, location, units, channels, timestamp, audio_url, raw_transcript, estimated_resolution_minutes, incident_type, group_id, duration, external_id, created_at')
+      .order('timestamp', { ascending: false })
+      .limit(1000);
 
-    if (init) {
-      url += '?init=1';
-    } else if (lastPos && lastPos > 0) {
-      url += `?pos=${lastPos}`;
-    } else {
-      url += '?init=1';
+    if (error) {
+      console.error('Error fetching incidents from Supabase:', error);
+      return [];
     }
 
-    const response = await fetch(url);
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch Broadcastify calls: ${response.statusText}`);
-    }
-
-    const data: BroadcastifyResponse = await response.json();
-
-    const dispatchIncidents: FireIncident[] = data.incidents.map(incident => {
-      const timestamp = typeof incident.timestamp === 'string'
-        ? new Date(incident.timestamp)
-        : incident.timestamp;
-
-      return {
-        traffic_report_id: incident.id,
-        published_date: timestamp.toISOString(),
-        issue_reported: incident.callType,
-        location: incident.location,
-        latitude: incident.location?.coordinates?.[1]?.toString() || '0',
-        longitude: incident.location?.coordinates?.[0]?.toString() || '0',
-        address: incident.address,
-        traffic_report_status: 'ACTIVE' as const,
-        traffic_report_status_date_time: timestamp.toISOString(),
-        agency: 'Austin Fire Department',
-        incidentType: incident.incidentType,
-        units: incident.units,
-        channels: incident.channels,
-        audioUrl: incident.audioUrl,
-        rawTranscript: incident.rawTranscript,
-        estimatedResolutionMinutes: incident.estimatedResolutionMinutes,
-      };
-    });
-
-    return { incidents: dispatchIncidents, lastPos: data.lastPos };
+    const incidents = (data as SupabaseIncident[]).map(convertSupabaseToFireIncident);
+    return deduplicateIncidents(incidents);
   } catch (error) {
-    console.error('Error fetching Broadcastify calls:', error);
-    return { incidents: [], lastPos: lastPos || 0 };
+    console.error('Error fetching incidents:', error);
+    return [];
   }
 }
 
@@ -217,8 +250,7 @@ export async function fetchFireIncidents(): Promise<FireIncident[]> {
   }
 }
 
-const CACHE_KEY_INCIDENTS = 'dispatch_incidents_cache';
-const CACHE_KEY_LASTPOS = 'dispatch_lastpos_cache';
+const CACHE_KEY_INCIDENTS = 'supabase_incidents_cache';
 
 export function useFireIncidents() {
   const [incidents, setIncidents] = useState<FireIncident[]>([]);
@@ -226,17 +258,10 @@ export function useFireIncidents() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [isManualRefresh, setIsManualRefresh] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [processingState, setProcessingState] = useState<{
-    total: number;
-    completed: number;
-  } | null>(null);
-  const [isInitialStream, setIsInitialStream] = useState(true);
-  const lastPosRef = useRef<number>(0);
-  const dispatchIncidentsRef = useRef<FireIncident[]>([]);
   const isInitializedRef = useRef(false);
   const isFetchingRef = useRef(false);
 
-  const fetchData = useCallback(async (manual = false, useInit = false) => {
+  const fetchData = useCallback(async (manual = false) => {
     if (isFetchingRef.current) {
       console.log('⚠️ Fetch already in progress, skipping...');
       return;
@@ -249,260 +274,18 @@ export function useFireIncidents() {
         setIsManualRefresh(true);
       }
 
-      console.log('=== FETCH START (STREAMING) ===');
-      console.log('Current lastPos:', lastPosRef.current, new Date(lastPosRef.current * 1000).toISOString());
-      console.log('Incidents in memory before fetch:', dispatchIncidentsRef.current.length);
-      console.log('Using init:', useInit);
+      console.log('=== FETCH START (SUPABASE) ===');
 
-      const streamingIncidents: FireIncident[] = [];
+      const fetchedIncidents = await fetchIncidentsFromSupabase();
 
-      const broadcastifyData = await fetchBroadcastifyLiveCallsStreaming(
-        useInit ? undefined : lastPosRef.current,
-        useInit,
-        {
-          onProgress: (completed, total) => {
-            setProcessingState({ completed, total });
-          },
-          onIncident: (incident) => {
-            streamingIncidents.push(incident);
+      console.log('Fetched incidents from Supabase:', fetchedIncidents.length);
 
-            setIncidents(prev => {
-              const allIncidents = [incident, ...dispatchIncidentsRef.current, ...prev];
-
-              const dedupById = Array.from(
-                new Map(allIncidents.map(inc => [inc.traffic_report_id, inc])).values()
-              );
-
-              console.log('\n--- STREAMING INCIDENT DEDUPLICATION ---');
-              const sortedByTime = [...dedupById].sort((a, b) =>
-                new Date(b.published_date).getTime() - new Date(a.published_date).getTime()
-              );
-
-              const assignedUnits = new Set<string>();
-              const afterUnitDedup: FireIncident[] = [];
-
-              for (const inc of sortedByTime) {
-                if (!inc.units || inc.units.length === 0) {
-                  afterUnitDedup.push(inc);
-                  continue;
-                }
-
-                const availableUnits = inc.units.filter(unit => !assignedUnits.has(unit));
-
-                if (availableUnits.length === 0) {
-                  continue;
-                }
-
-                afterUnitDedup.push({
-                  ...inc,
-                  units: availableUnits,
-                });
-
-                availableUnits.forEach(unit => assignedUnits.add(unit));
-              }
-
-              const normalizeCallType = (callType: string) => {
-                return callType.toLowerCase().replace(/[^a-z0-9]/g, '');
-              };
-
-              const seenByCallType = new Map<string, FireIncident[]>();
-              const finalDeduped: FireIncident[] = [];
-
-              for (const inc of afterUnitDedup) {
-                const normalizedCallType = normalizeCallType(inc.issue_reported);
-
-                if (!seenByCallType.has(normalizedCallType)) {
-                  seenByCallType.set(normalizedCallType, []);
-                }
-                seenByCallType.get(normalizedCallType)!.push(inc);
-              }
-
-              for (const [, incs] of seenByCallType.entries()) {
-                const incidentsWithAddress = incs.filter(inc => inc.address && inc.address !== '?');
-                const incidentsWithoutAddress = incs.filter(inc => !inc.address || inc.address === '?');
-
-                const grouped = new Map<string, FireIncident[]>();
-
-                for (const inc of incidentsWithAddress) {
-                  const normalizedAddress = inc.address.trim().toLowerCase();
-                  if (!grouped.has(normalizedAddress)) {
-                    grouped.set(normalizedAddress, []);
-                  }
-                  grouped.get(normalizedAddress)!.push(inc);
-                }
-
-                for (const [, addressIncidents] of grouped.entries()) {
-                  const sorted = addressIncidents.sort((a, b) =>
-                    new Date(b.published_date).getTime() - new Date(a.published_date).getTime()
-                  );
-                  finalDeduped.push(sorted[0]);
-                }
-
-                if (incidentsWithoutAddress.length > 0) {
-                  const allUnitsInAddressedIncidents = new Set<string>();
-                  for (const inc of incidentsWithAddress) {
-                    if (inc.units) {
-                      inc.units.forEach(unit => allUnitsInAddressedIncidents.add(unit));
-                    }
-                  }
-
-                  for (const inc of incidentsWithoutAddress) {
-                    if (!inc.units || inc.units.length === 0) {
-                      continue;
-                    }
-
-                    const hasUniqueUnits = inc.units.some(unit => !allUnitsInAddressedIncidents.has(unit));
-
-                    if (hasUniqueUnits) {
-                      finalDeduped.push(inc);
-                    }
-                  }
-                }
-              }
-
-              console.log(`Streaming dedup: ${dedupById.length} → ${finalDeduped.length} incidents`);
-              return finalDeduped;
-            });
-          },
-          onComplete: (summary) => {
-            console.log('Streaming complete:', summary);
-            setProcessingState(null);
-            setIsInitialStream(false);
-          },
-        }
-      );
-
-      console.log('Broadcastify data received:', {
-        lastPos: broadcastifyData.lastPos,
-        lastPosDate: new Date(broadcastifyData.lastPos * 1000).toISOString(),
-        incidentsCount: broadcastifyData.incidents.length,
-        incidentIds: broadcastifyData.incidents.map(i => i.traffic_report_id),
-      });
-
-      lastPosRef.current = broadcastifyData.lastPos;
-
-      if (useInit) {
-        console.log('Using init - replaced all incidents via streaming');
-        dispatchIncidentsRef.current = streamingIncidents;
-      } else {
-        const existingIds = new Set(
-          dispatchIncidentsRef.current.map(inc => inc.traffic_report_id)
-        );
-        const newIncidents = streamingIncidents.filter(
-          inc => !existingIds.has(inc.traffic_report_id)
-        );
-        dispatchIncidentsRef.current = [
-          ...newIncidents,
-          ...dispatchIncidentsRef.current.slice(0, 50),
-        ];
-      }
-
-      localStorage.setItem(CACHE_KEY_INCIDENTS, JSON.stringify(dispatchIncidentsRef.current));
-      localStorage.setItem(CACHE_KEY_LASTPOS, lastPosRef.current.toString());
-
-      console.log('Total dispatch incidents in memory:', dispatchIncidentsRef.current.length);
-
-      setIncidents(prev => {
-        const allIncidents = [...dispatchIncidentsRef.current, ...prev];
-
-        const dedupById = Array.from(
-          new Map(allIncidents.map(inc => [inc.traffic_report_id, inc])).values()
-        );
-
-        console.log('\n--- FINAL DEDUPLICATION AFTER STREAMING ---');
-        const sortedByTime = [...dedupById].sort((a, b) =>
-          new Date(b.published_date).getTime() - new Date(a.published_date).getTime()
-        );
-
-        const assignedUnits = new Set<string>();
-        const afterUnitDedup: FireIncident[] = [];
-
-        for (const inc of sortedByTime) {
-          if (!inc.units || inc.units.length === 0) {
-            afterUnitDedup.push(inc);
-            continue;
-          }
-
-          const availableUnits = inc.units.filter(unit => !assignedUnits.has(unit));
-
-          if (availableUnits.length === 0) {
-            continue;
-          }
-
-          afterUnitDedup.push({
-            ...inc,
-            units: availableUnits,
-          });
-
-          availableUnits.forEach(unit => assignedUnits.add(unit));
-        }
-
-        const normalizeCallType = (callType: string) => {
-          return callType.toLowerCase().replace(/[^a-z0-9]/g, '');
-        };
-
-        const seenByCallType = new Map<string, FireIncident[]>();
-        const finalDeduped: FireIncident[] = [];
-
-        for (const inc of afterUnitDedup) {
-          const normalizedCallType = normalizeCallType(inc.issue_reported);
-
-          if (!seenByCallType.has(normalizedCallType)) {
-            seenByCallType.set(normalizedCallType, []);
-          }
-          seenByCallType.get(normalizedCallType)!.push(inc);
-        }
-
-        for (const [, incs] of seenByCallType.entries()) {
-          const incidentsWithAddress = incs.filter(inc => inc.address && inc.address !== '?');
-          const incidentsWithoutAddress = incs.filter(inc => !inc.address || inc.address === '?');
-
-          const grouped = new Map<string, FireIncident[]>();
-
-          for (const inc of incidentsWithAddress) {
-            const normalizedAddress = inc.address.trim().toLowerCase();
-            if (!grouped.has(normalizedAddress)) {
-              grouped.set(normalizedAddress, []);
-            }
-            grouped.get(normalizedAddress)!.push(inc);
-          }
-
-          for (const [, addressIncidents] of grouped.entries()) {
-            const sorted = addressIncidents.sort((a, b) =>
-              new Date(b.published_date).getTime() - new Date(a.published_date).getTime()
-            );
-            finalDeduped.push(sorted[0]);
-          }
-
-          if (incidentsWithoutAddress.length > 0) {
-            const allUnitsInAddressedIncidents = new Set<string>();
-            for (const inc of incidentsWithAddress) {
-              if (inc.units) {
-                inc.units.forEach(unit => allUnitsInAddressedIncidents.add(unit));
-              }
-            }
-
-            for (const inc of incidentsWithoutAddress) {
-              if (!inc.units || inc.units.length === 0) {
-                continue;
-              }
-
-              const hasUniqueUnits = inc.units.some(unit => !allUnitsInAddressedIncidents.has(unit));
-
-              if (hasUniqueUnits) {
-                finalDeduped.push(inc);
-              }
-            }
-          }
-        }
-
-        console.log(`Final dedup: ${dedupById.length} → ${finalDeduped.length} incidents`);
-        console.log('=== FETCH END ===\n');
-        return finalDeduped;
-      });
+      setIncidents(fetchedIncidents);
+      localStorage.setItem(CACHE_KEY_INCIDENTS, JSON.stringify(fetchedIncidents));
 
       setLastUpdated(new Date());
       setIsLoading(false);
+      console.log('=== FETCH END ===\n');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch data');
       setIsLoading(false);
@@ -520,25 +303,14 @@ export function useFireIncidents() {
 
       console.log('=== INITIALIZATION ===');
 
-      let hasCache = false;
       try {
         const cachedIncidents = localStorage.getItem(CACHE_KEY_INCIDENTS);
-        const cachedLastPos = localStorage.getItem(CACHE_KEY_LASTPOS);
 
-        if (cachedIncidents && cachedLastPos) {
+        if (cachedIncidents) {
           const parsed = JSON.parse(cachedIncidents) as FireIncident[];
           console.log('Loaded from cache:', parsed.length, 'incidents');
-          console.log('Cached incident IDs:', parsed.map(i => i.traffic_report_id));
-          dispatchIncidentsRef.current = parsed;
           setIncidents(parsed);
           setIsLoading(false);
-
-          lastPosRef.current = parseInt(cachedLastPos, 10);
-          console.log('Loaded lastPos from cache:', lastPosRef.current, new Date(lastPosRef.current * 1000).toISOString());
-          hasCache = true;
-        } else {
-          console.log('No cache found, will use init=1 to fetch last 25 calls');
-          lastPosRef.current = 0;
         }
       } catch (error) {
         console.error('Failed to load cache:', error);
@@ -546,58 +318,47 @@ export function useFireIncidents() {
 
       console.log('=== INITIALIZATION END ===\n');
 
-      if (!hasCache) {
-        console.log('First load without cache - using init=1');
-        fetchData(false, true);
-      } else {
-        fetchData();
-      }
+      fetchData();
     }
 
-    const standardInterval = setInterval(fetchData, 60 * 1000);
+    const subscription = supabase
+      .channel('incidents_channel')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'incidents' },
+        (payload) => {
+          console.log('New incident received via realtime:', payload.new);
+          const newIncident = convertSupabaseToFireIncident(payload.new as SupabaseIncident);
+          setIncidents(prev => deduplicateIncidents([newIncident, ...prev]));
+        }
+      )
+      .subscribe();
+
+    const refreshInterval = setInterval(fetchData, 60 * 1000);
+
     return () => {
-      clearInterval(standardInterval);
+      subscription.unsubscribe();
+      clearInterval(refreshInterval);
     };
   }, [fetchData]);
 
   const manualRefetch = useCallback(() => fetchData(true), [fetchData]);
 
-  const fetchInitial = useCallback(() => {
-    console.log('=== FETCH INITIAL (LAST 25 CALLS) ===');
-    fetchData(true, true);
-  }, [fetchData]);
-
-  const setPosition = useCallback((pos: number) => {
-    console.log('=== SET POSITION ===');
-    console.log('Old position:', lastPosRef.current, new Date(lastPosRef.current * 1000).toISOString());
-    console.log('New position:', pos, new Date(pos * 1000).toISOString());
-
-    lastPosRef.current = pos;
-    localStorage.setItem(CACHE_KEY_LASTPOS, pos.toString());
-
-    console.log('Position updated in ref and localStorage');
-    console.log('=== SET POSITION END ===\n');
-  }, []);
-
   const resetStorage = useCallback(() => {
     console.log('=== RESET STORAGE ===');
 
     localStorage.removeItem(CACHE_KEY_INCIDENTS);
-    localStorage.removeItem(CACHE_KEY_LASTPOS);
 
-    lastPosRef.current = 0;
-    dispatchIncidentsRef.current = [];
     isInitializedRef.current = false;
 
     setIncidents([]);
     setIsLoading(true);
-    setIsInitialStream(true);
 
     console.log('Storage cleared, re-initializing...');
 
     setTimeout(() => {
       isInitializedRef.current = true;
-      fetchData(true, true);
+      fetchData(true);
     }, 100);
   }, [fetchData]);
 
@@ -607,11 +368,7 @@ export function useFireIncidents() {
     lastUpdated,
     isManualRefresh,
     isLoading,
-    processingState,
-    isInitialStream,
     refetch: manualRefetch,
-    setPosition,
-    fetchInitial,
     resetStorage
   };
 }

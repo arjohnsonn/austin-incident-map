@@ -1,9 +1,13 @@
-import { ParsedDispatchCall } from '@/types/broadcastify';
-import OpenAI from 'openai';
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+export interface ParsedDispatchCall {
+  callType: string | null;
+  units: string[];
+  channels: string[];
+  address: string | null;
+  addressVariants: string[];
+  estimatedResolutionMinutes: number;
+  rawTranscript: string;
+  incidentType: 'fire' | 'medical';
+}
 
 const UNIT_PATTERNS = [
   /\b(?:engine|eng|e)\s*(\d+)\b/gi,
@@ -68,7 +72,7 @@ function preprocessTranscript(transcript: string): string {
   processed = processed.replace(/\bQuinn\s+(\d+)\b/gi, 'Quint $1');
   processed = processed.replace(/\bWAD\s+(\d+)\b/gi, 'Squad $1');
   processed = processed.replace(/\bAPS\s+(\d+)/gi, 'at $1');
-  processed = processed.replace(/\bF-Pack[-\s]+(\d+)\b/gi, 'F-TAC-$1');
+  processed = processed.replace(/\bF-Pack\s+(\d+)\b/gi, 'F-TAC $1');
   processed = processed.replace(/\bFox\s+Alarm\b/gi, 'Box Alarm');
   processed = processed.replace(/\bFillbox\s+Alarm\b/gi, 'Stillbox Alarm');
   processed = processed.replace(/\bthree\s+down\b/gi, 'Tree Down');
@@ -81,12 +85,14 @@ function preprocessTranscript(transcript: string): string {
   processed = processed.replace(/\b(?:Bach|batch)\s*,?\s*ST[-\s]*(\d+)/gi, 'Box ST-$1');
   processed = processed.replace(/\bChesapeake\b/gi, 'Chest Pain');
   processed = processed.replace(/\bESC\s+(\d+)/gi, 'ESD $1');
-  processed = processed.replace(/\b[BbRr]roke\b/g, 'stroke');
+  processed = processed.replace(/\b[BbRr]oke\b/g, 'stroke');
 
   return processed;
 }
 
-export async function parseDispatchCallWithAI(transcript: string): Promise<ParsedDispatchCall> {
+export async function parseDispatchCallWithAI(
+  transcript: string
+): Promise<ParsedDispatchCall> {
   console.log('\n--- AI DISPATCH PARSER START ---');
   console.log('Original transcript:', transcript);
 
@@ -96,12 +102,23 @@ export async function parseDispatchCallWithAI(transcript: string): Promise<Parse
   }
 
   try {
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        {
-          role: 'system',
-          content: `You are a fire/EMS dispatch call parser for Austin/Travis County, Texas. Extract structured information from dispatch audio transcripts.
+    const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
+    if (!openaiApiKey) {
+      throw new Error('OPENAI_API_KEY not configured');
+    }
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${openaiApiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: `You are a fire/EMS dispatch call parser for Austin/Travis County, Texas. Extract structured information from dispatch audio transcripts.
 
 Extract:
 - callType: Extract ONLY the incident/call type itself - the core emergency type without any location details, box numbers, or extra context. Apply PROPER TITLE CASE CAPITALIZATION. DO NOT include: "in AFD box", "at [address]", "on [channel]", alarm box identifiers, geographic areas, or any location information. Examples: "unlock alarm in AFD box 18-01 at East 290 Service Road" → "Unlock Alarm" (NOT "Unlock Alarm In AFD Box 18-01"), "assist person stuck in elevator in AFD box 5106 at 4700 Westgate Blvd" → "Assist Person Stuck In Elevator", "lift assist code 1 in AFD box 801" → "Lift Assist Code 1", "gunshot wound" → "Gunshot Wound", "respiratory" → "Respiratory", "vehicle fire" → "Vehicle Fire". IMPORTANT: "Code 1", "Code One", "Code 2", "Code Two", etc. are priority levels and should NEVER be standalone call types - they must be combined with the actual incident type (e.g., "Sick Person Code 1", "Fall Code 2"). If an alarm level is mentioned (First Alarm, Second Alarm, etc.), use that as the call type. Extract ONLY the emergency type, nothing else.
@@ -112,19 +129,25 @@ Extract:
 - addressVariants: Array of 5-10 comprehensive address variations for geocoding, optimized for Austin/Travis County, TX. GENERATE VARIANTS COVERING ALL ABBREVIATION COMBINATIONS. Include: (1) Original address as heard, (2) Variants with ALL street type abbreviations: St/Street, Blvd/Boulevard, Rd/Road, Dr/Drive, Ln/Lane, Ave/Avenue, Ct/Court, Pl/Place, Pkwy/Parkway, Trl/Trail, Loop, Cir/Circle, Frontage/Frntg, Service/Svc, (3) Variants with ALL directional abbreviations: N/North, S/South, E/East, W/West, NE/Northeast, NW/Northwest, SE/Southeast, SW/Southwest, (4) Combinations of abbreviated and expanded forms (e.g., for "Woodward St & E Ben White Blvd Frontage Rd" generate: "Woodward Street & East Ben White Boulevard Frontage Road", "Woodward St & East Ben White Blvd Frontage Rd", "Woodward Street & E Ben White Boulevard Frontage Rd", etc.), (5) Austin/Travis County location suffixes ("Austin TX", "Travis County TX"), (6) Corrected spellings of known Austin streets (e.g., "Guadalupe" often mistranscribed, "Lamar" variants, "MoPac"/"Loop 1", "I-35"/"Interstate 35" variants), (7) Variants without directional prefixes if applicable. For address ranges, include variants with just the first number (e.g., for "2200-2400 Main St", include "2200 Main St"). Examples: ["2328 Hartford Road", "2328 Hartford Rd", "2328 Hartford Road Austin TX", "2328 Hartford Rd Travis County TX"]. For highways: ["I-35 North", "Interstate 35 North", "I-35", "US Highway 35"]. For complex intersections: ["Woodward St & E Ben White Blvd Frontage Rd", "Woodward Street & East Ben White Boulevard Frontage Road", "Woodward St & East Ben White Blvd Service Rd", "Woodward Street & E Ben White Blvd Frontage Rd"]. Always ensure variants are appropriate for Austin/Travis County geography.
 - estimatedResolutionMinutes: Estimated time in minutes until this incident is likely resolved. Guidelines: Medical calls (chest pain, respiratory, unconscious) ~30min, Traffic accidents ~45min, Fire alarm activation ~15min, Lift assist ~20min, First Alarm ~60min, Second Alarm ~120min, Third Alarm+ ~180min, Vehicle fire ~30min, Structure fire without alarm level ~45min, Hazmat ~90min, Rescue ~60min. Consider severity and number of responding units. You do not have to follow these, these are just examples.
 
-Return valid JSON only. If something isn't mentioned, use null or empty array. estimatedResolutionMinutes, incidentType, and addressVariants must always be provided (addressVariants can be empty array if no address).`
-        },
-        {
-          role: 'user',
-          content: cleanedTranscript
-        }
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.1,
-      max_tokens: 500,
+Return valid JSON only. If something isn't mentioned, use null or empty array. estimatedResolutionMinutes, incidentType, and addressVariants must always be provided (addressVariants can be empty array if no address).`,
+          },
+          {
+            role: 'user',
+            content: cleanedTranscript,
+          },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.1,
+        max_tokens: 500,
+      }),
     });
 
-    const result = JSON.parse(completion.choices[0].message.content || '{}');
+    if (!response.ok) {
+      throw new Error(`OpenAI API error: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    const result = JSON.parse(data.choices[0].message.content || '{}');
 
     const cleanedUnits = (result.units || []).map((unit: string) => {
       return unit.replace(/(\w+)\s+(\d+)-(\d+)/g, '$1 $2$3');
@@ -258,11 +281,54 @@ export function parseDispatchCall(transcript: string): ParsedDispatchCall {
     console.log('  ✗ No address found');
   }
 
+  const addressVariants: string[] = [];
+  if (address) {
+    console.log('\nGenerating address variants for geocoding:');
+
+    addressVariants.push(address);
+    addressVariants.push(`${address}, Austin, TX`);
+    addressVariants.push(`${address}, Austin, Texas`);
+    addressVariants.push(`${address}, Travis County, TX`);
+
+    const abbreviated = address
+      .replace(/\bStreet\b/gi, 'St')
+      .replace(/\bRoad\b/gi, 'Rd')
+      .replace(/\bDrive\b/gi, 'Dr')
+      .replace(/\bBoulevard\b/gi, 'Blvd')
+      .replace(/\bLane\b/gi, 'Ln')
+      .replace(/\bAvenue\b/gi, 'Ave')
+      .replace(/\bCourt\b/gi, 'Ct')
+      .replace(/\bPlace\b/gi, 'Pl');
+
+    if (abbreviated !== address) {
+      addressVariants.push(abbreviated);
+      addressVariants.push(`${abbreviated}, Austin, TX`);
+    }
+
+    const expanded = address
+      .replace(/\bSt\b/gi, 'Street')
+      .replace(/\bRd\b/gi, 'Road')
+      .replace(/\bDr\b/gi, 'Drive')
+      .replace(/\bBlvd\b/gi, 'Boulevard')
+      .replace(/\bLn\b/gi, 'Lane')
+      .replace(/\bAve\b/gi, 'Avenue')
+      .replace(/\bCt\b/gi, 'Court')
+      .replace(/\bPl\b/gi, 'Place');
+
+    if (expanded !== address && expanded !== abbreviated) {
+      addressVariants.push(expanded);
+      addressVariants.push(`${expanded}, Austin, TX`);
+    }
+
+    console.log(`  Generated ${addressVariants.length} variants:`, addressVariants.slice(0, 3).join('; ') + '...');
+  }
+
   console.log('\n--- PARSER RESULTS ---');
   console.log('Call Type:', callType || 'null');
   console.log('Units:', units.length > 0 ? units.join(', ') : 'none');
   console.log('Channels:', channels.length > 0 ? channels.join(', ') : 'none');
   console.log('Address:', address || 'null');
+  console.log('Address Variants:', addressVariants.length);
   console.log('Estimated Resolution:', '60 minutes (fallback default)');
   console.log('--- DISPATCH PARSER END ---\n');
 
@@ -272,7 +338,7 @@ export function parseDispatchCall(transcript: string): ParsedDispatchCall {
     units,
     channels,
     address,
-    addressVariants: [],
+    addressVariants,
     estimatedResolutionMinutes: 60,
     rawTranscript: cleanedTranscript,
   };

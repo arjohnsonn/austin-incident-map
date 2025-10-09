@@ -39,11 +39,13 @@ Real-time emergency incident monitoring and visualization for Austin and Travis 
 - [Turbopack](https://turbo.build/pack) - Fast bundler
 
 **Backend**
+- [Supabase](https://supabase.com/) - PostgreSQL database, Edge Functions, Realtime subscriptions
 - [Next.js API Routes](https://nextjs.org/docs/app/building-your-application/routing/route-handlers) - Serverless functions
 - [Server-Sent Events (SSE)](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events) - Real-time streaming
 - [Deepgram API](https://deepgram.com/) - Speech-to-text transcription (Nova-2 model)
 - [OpenAI API](https://platform.openai.com/) - GPT-4o-mini for transcript parsing
 - [jsonwebtoken](https://github.com/auth0/node-jsonwebtoken) - JWT authentication for Broadcastify
+- [pg_cron](https://github.com/citusdata/pg_cron) - Background job scheduling
 
 **Data Sources**
 - [Austin Open Data Portal](https://data.austintexas.gov/) - Fire/rescue/traffic incidents
@@ -54,6 +56,8 @@ Real-time emergency incident monitoring and visualization for Austin and Travis 
 ## 📋 Prerequisites
 
 - **Node.js** 20+ and **pnpm** 9+
+- **Supabase account** (free tier is sufficient)
+- **Supabase CLI** (`npm install -g supabase`)
 - **Broadcastify API credentials** (API Key ID, Secret, App ID)
 - **Deepgram API key** (free tier: 45,000 minutes/month)
 - **OpenAI API key** (for GPT-4o-mini transcript parsing)
@@ -74,11 +78,32 @@ cd austin-fire-map
 pnpm install
 ```
 
-### 3. Configure Environment Variables
+### 3. Set Up Supabase
+
+```bash
+# Login to Supabase
+supabase login
+
+# Link to your project (or create new one)
+supabase link --project-ref YOUR_PROJECT_REF
+
+# Run database migrations
+supabase db push
+```
+
+See `SUPABASE_DEPLOYMENT.md` for detailed setup instructions.
+
+### 4. Configure Environment Variables
 
 Create a `.env.local` file in the project root:
 
 ```env
+# Supabase Configuration
+# Obtain from: https://supabase.com/dashboard/project/_/settings/api
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+
 # Broadcastify API Credentials
 # Obtain from: https://www.broadcastify.com/developer
 BROADCASTIFY_API_KEY_ID=your_api_key_id
@@ -98,7 +123,7 @@ GEOCODING_API_KEY=your_mapsco_api_key
 GEOCODING_API_KEY_2=your_mapsco_api_key_2
 ```
 
-### 4. Run Development Server
+### 5. Run Development Server
 
 ```bash
 pnpm run dev
@@ -145,38 +170,44 @@ For testing or review:
 ### Data Flow
 
 ```
-┌─────────────────┐
-│ Broadcastify    │
-│ Calls API       │
-└────────┬────────┘
-         │
-         ├─► JWT Authentication
-         │
-         ├─► Fetch Live Radio Calls (MP3 URLs)
-         │
-         ▼
-┌─────────────────┐
-│ Deepgram API    │
-│ (Transcription) │
-└────────┬────────┘
-         │
-         ├─► Parallel Batch Processing (20 concurrent)
-         │   ├─ Nova-2 model
-         │   └─ Smart formatting
-         │
-         ▼
-┌─────────────────┐
-│ OpenAI API      │
-│ (GPT-4o-mini)   │
-└────────┬────────┘
-         │
-         ├─► Extract structured data:
-         │   ├─ Call type
-         │   ├─ Units
-         │   ├─ Addresses
-         │   ├─ Channels
-         │   └─ Address variants
-         │
+┌─────────────────────────────────────────────────┐
+│           Supabase Infrastructure               │
+│                                                 │
+│  ┌──────────────────────────────────────────┐  │
+│  │  pg_cron (runs every 60 seconds)         │  │
+│  │              ↓                            │  │
+│  │  Edge Function: process-calls            │  │
+│  └──────────────────────────────────────────┘  │
+│                      ↓                          │
+└─────────────────────┬───────────────────────────┘
+                      │
+         ┌────────────┼────────────┐
+         │                         │
+         ▼                         ▼
+┌─────────────────┐      ┌─────────────────┐
+│ Broadcastify    │      │ Next.js API     │
+│ Calls API       │      │ Route (SSE)     │
+└────────┬────────┘      └────────┬────────┘
+         │                        │
+         ├─► JWT Auth             │
+         ├─► Fetch Live Calls     │
+         │                        │
+         ▼                        ▼
+┌─────────────────┐      ┌─────────────────┐
+│ Deepgram API    │◄─────┤ Process Audio   │
+│ (Transcription) │      │ & Transcripts   │
+└────────┬────────┘      └────────┬────────┘
+         │                        │
+         ├─► Parallel Processing  │
+         │   (20 concurrent)      │
+         │                        │
+         ▼                        ▼
+┌─────────────────┐      ┌─────────────────┐
+│ OpenAI API      │◄─────┤ Parse Data:     │
+│ (GPT-4o-mini)   │      │ - Call types    │
+└────────┬────────┘      │ - Units         │
+         │               │ - Addresses     │
+         │               └─────────────────┘
          ▼
 ┌─────────────────┐
 │ Geocoding       │
@@ -186,19 +217,27 @@ For testing or review:
          ├─► Nominatim (primary)
          ├─► Maps.co (fallback)
          │
-         ├─► Stream via SSE
-         │
          ▼
-┌─────────────────┐
-│ Client State    │
-│ (React Hooks)   │
-└────────┬────────┘
-         │
-         ├─► Filter & Search
-         │
-         ├─► Update Map Markers
-         │
-         └─► Display Banners
+┌─────────────────────────────────────────────────┐
+│           Supabase PostgreSQL                   │
+│                                                 │
+│  ┌──────────────────────────────────────────┐  │
+│  │  incidents table (with PostGIS)          │  │
+│  │  worker_state table (track position)     │  │
+│  └──────────────────────────────────────────┘  │
+│                      ↓                          │
+│  ┌──────────────────────────────────────────┐  │
+│  │  Realtime (WebSocket subscriptions)      │  │
+│  └──────────────────────────────────────────┘  │
+└─────────────────────┬───────────────────────────┘
+                      │
+                      ▼
+         ┌────────────────────────┐
+         │  Next.js Frontend      │
+         │  - Map rendering       │
+         │  - Filtering           │
+         │  - Realtime updates    │
+         └────────────────────────┘
 ```
 
 ### Project Structure
@@ -225,16 +264,30 @@ austin-fire-map/
 │   │   ├── api.ts                        # useFireIncidents hook
 │   │   ├── dispatch-parser.ts            # GPT-4o-mini parsing logic
 │   │   ├── broadcastify-jwt.ts           # JWT token generation
+│   │   ├── supabase.ts                   # Supabase client
 │   │   ├── settings.ts                   # Settings persistence
 │   │   └── utils.ts                      # Utility functions
 │   └── types/
 │       ├── incident.ts                   # Incident data types
 │       └── broadcastify.ts               # API response types
+├── supabase/
+│   ├── functions/
+│   │   ├── process-calls/                # Edge Function for background processing
+│   │   │   ├── index.ts                  # Main function handler
+│   │   │   └── deno.json                 # Deno configuration
+│   │   └── _shared/                      # Shared utilities
+│   │       ├── broadcastify-jwt.ts       # JWT generation
+│   │       └── dispatch-parser.ts        # Transcript parsing
+│   ├── migrations/
+│   │   ├── 001_initial_schema.sql        # Tables, indexes, RLS policies
+│   │   └── 002_setup_cron.sql            # pg_cron job configuration
+│   └── config.toml                       # Supabase project configuration
 ├── public/                               # Static assets
 ├── .env.local                            # Environment variables (create this)
 ├── package.json                          # Dependencies
 ├── tsconfig.json                         # TypeScript configuration
-└── tailwind.config.js                    # Tailwind CSS configuration
+├── tailwind.config.js                    # Tailwind CSS configuration
+└── SUPABASE_DEPLOYMENT.md                # Deployment guide
 ```
 
 ## 🔧 Configuration
@@ -338,20 +391,34 @@ location.reload()
 
 ## 🚢 Deployment
 
-### Vercel (Recommended)
+### Supabase Backend
+
+Deploy the Edge Function and database:
+
+```bash
+# Deploy Edge Function
+supabase functions deploy process-calls
+
+# Configure Edge Function secrets
+supabase secrets set BROADCASTIFY_API_KEY_ID=your_key
+# ... (see SUPABASE_DEPLOYMENT.md for complete list)
+```
+
+Then set up the cron job in the Supabase SQL Editor (see `SUPABASE_DEPLOYMENT.md`).
+
+### Vercel Frontend (Recommended)
 
 1. Push code to GitHub
 2. Import project in [Vercel Dashboard](https://vercel.com)
-3. Add environment variables in project settings
+3. Add environment variables in project settings:
+   - Supabase URL and keys (3 variables)
+   - Broadcastify credentials (3 variables)
+   - Deepgram API key
+   - OpenAI API key
+   - Optional: Maps.co geocoding keys
 4. Deploy
 
-### Environment Variables for Production
-
-Ensure all required environment variables are set:
-- Broadcastify credentials (3 variables)
-- Deepgram API key
-- OpenAI API key
-- Optional: Maps.co geocoding keys
+For detailed instructions, see `SUPABASE_DEPLOYMENT.md`.
 
 ### Performance Considerations
 
@@ -365,6 +432,7 @@ Ensure all required environment variables are set:
 ## 💰 Cost Estimates
 
 For typical usage (monitoring 1-2 channels):
+- **Supabase**: FREE (500MB database, 500k Edge Function invocations/month)
 - **Deepgram**: FREE (45k min/month tier covers ~1500 incidents/day)
 - **OpenAI**: ~$3-5/month (GPT-4o-mini parsing)
 - **Nominatim**: FREE (community service)
@@ -372,6 +440,8 @@ For typical usage (monitoring 1-2 channels):
 - **Vercel**: FREE (Hobby tier sufficient)
 
 **Total**: $0-15/month depending on traffic and geocoding needs
+
+The cron job running every 60 seconds = 43,200 invocations/month, well within Supabase's free tier.
 
 ## 📝 License
 
