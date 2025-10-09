@@ -28,7 +28,7 @@ export const supabase = new Proxy({} as SupabaseClient, {
     if (!client) {
       throw new Error('Supabase client not available');
     }
-    return (client as any)[prop];
+    return client[prop as keyof SupabaseClient];
   }
 });
 
