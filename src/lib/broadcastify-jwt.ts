@@ -1,13 +1,5 @@
 import jwt from 'jsonwebtoken';
 
-interface BroadcastifyJWTPayload {
-  iss: string;
-  iat: number;
-  exp: number;
-  uid?: string;
-  token?: string;
-}
-
 interface AuthenticatedUser {
   username: string;
   uid: string;
@@ -27,7 +19,13 @@ export function generateBroadcastifyJWT(uid?: string, token?: string): string {
   }
 
   const now = Math.floor(Date.now() / 1000);
-  const payload: any = {
+  const payload: {
+    iss: string;
+    iat: number;
+    exp: number;
+    sub?: number;
+    utk?: string;
+  } = {
     iss: appId,
     iat: now,
     exp: now + 3600,

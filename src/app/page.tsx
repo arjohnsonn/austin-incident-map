@@ -11,7 +11,6 @@ import { IncidentsList } from "@/components/IncidentsList";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { CallBanner } from "@/components/CallBanner";
-import { LoadingScreen } from "@/components/LoadingScreen";
 import { useFireIncidents } from "@/lib/api";
 import { useSettings, SettingsProvider } from "@/lib/settings";
 import { FireIncident } from "@/types/incident";
@@ -27,8 +26,6 @@ function HomeContent() {
     processingState,
     isInitialStream,
     refetch,
-    setPosition,
-    fetchInitial,
     resetStorage,
   } = useFireIncidents();
   const { settings } = useSettings();
@@ -160,7 +157,6 @@ function HomeContent() {
             processingState={processingState}
             isInitialStream={isInitialStream}
             onRefresh={refetch}
-            onFetchInitial={fetchInitial}
             onResetStorage={resetStorage}
           />
         </ResizablePanel>

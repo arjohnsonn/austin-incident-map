@@ -232,7 +232,7 @@ async function transcribeAudio(audioUrl: string): Promise<string> {
   }
 }
 
-Deno.serve(async (req) => {
+Deno.serve(async () => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;

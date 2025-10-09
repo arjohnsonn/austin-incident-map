@@ -508,7 +508,6 @@ export function IncidentMap({
         `;
       } else {
         const incident = firstIncident;
-        const isActive = incident.traffic_report_status === "ACTIVE";
         const formatDate = (dateString: string) => {
           try {
             const date = new Date(dateString);

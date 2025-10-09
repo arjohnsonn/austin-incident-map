@@ -35,7 +35,6 @@ function parseLocation(location: string | null): [number, number] | null {
       const byteOrder = view.getUint8(0);
       const littleEndian = byteOrder === 1;
 
-      const srid = view.getUint32(1, littleEndian);
       const lon = view.getFloat64(9, littleEndian);
       const lat = view.getFloat64(17, littleEndian);
 

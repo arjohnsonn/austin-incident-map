@@ -44,7 +44,6 @@ interface IncidentsListProps {
   processingState?: { total: number; completed: number } | null;
   isInitialStream?: boolean;
   onRefresh?: () => void;
-  onFetchInitial?: () => void;
   onResetStorage?: () => void;
 }
 
@@ -533,7 +532,6 @@ export function IncidentsList({
   processingState,
   isInitialStream,
   onRefresh,
-  onFetchInitial,
   onResetStorage,
 }: IncidentsListProps) {
   const { settings } = useSettings();
