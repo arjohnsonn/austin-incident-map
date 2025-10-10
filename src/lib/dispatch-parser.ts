@@ -36,6 +36,8 @@ export function quickEstimateResolution(transcript: string): number {
   if (/\b(second|2nd)\s+alarm\b/i.test(lower)) return 180;
   if (/\b(first|1st)\s+alarm\b/i.test(lower) || /\bbox\s+alarm\b/i.test(lower)) return 90;
 
+  if (/\btask\s+force\b/i.test(lower)) return 90;
+
   if (/\b(structure\s+fire|building\s+fire|house\s+fire)\b/i.test(lower)) return 45;
   if (/\b(vehicle\s+fire|car\s+fire)\b/i.test(lower)) return 30;
   if (/\b(brush\s+fire|wildfire|grass\s+fire)\b/i.test(lower)) return 45;
