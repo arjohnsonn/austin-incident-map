@@ -30,9 +30,9 @@ export function IncidentCard({
     }
   };
 
-  const hasStagingInstructions = incident.rawTranscript?.includes(
-    "Check for possible staging instructions"
-  );
+  const hasStagingInstructions = incident.rawTranscript
+    ?.toLowerCase()
+    .includes("check for possible staging instructions");
 
   return (
     <Card

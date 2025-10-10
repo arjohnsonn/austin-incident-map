@@ -293,7 +293,7 @@ const VirtualizedList = memo(
       const isSelected =
         selectedIncident?.traffic_report_id === incident.traffic_report_id;
       const isNew = newIncidentIds.has(incident.traffic_report_id);
-      const hasStagingInstructions = incident.rawTranscript?.includes("Check for possible staging instructions");
+      const hasStagingInstructions = incident.rawTranscript?.toLowerCase().includes("check for possible staging instructions");
 
       visibleItems.push(
         <div
