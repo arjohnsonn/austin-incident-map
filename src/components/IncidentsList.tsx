@@ -2,13 +2,21 @@
 
 import { useState, useMemo, memo, useRef, useEffect, useCallback } from "react";
 import { format } from "date-fns";
-import { Search, Calendar, RefreshCw, Play, Pause, Trash2, Volume2 } from "lucide-react";
+import { Search, Calendar, RefreshCw, Play, Pause, Trash2, Volume2, AlertTriangle, Filter } from "lucide-react";
 import { useSettings } from "@/lib/settings";
 import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { IncidentCard } from "@/components/IncidentCard";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import {
   Tooltip,
   TooltipContent,
@@ -538,9 +546,12 @@ export function IncidentsList({
     startDate: undefined,
     endDate: undefined,
     agency: "ALL",
+    units: [],
+    showOnlyStaging: false,
   });
 
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
+  const [isFiltersDialogOpen, setIsFiltersDialogOpen] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -655,6 +666,22 @@ export function IncidentsList({
         return false;
       }
 
+      if (filters.units.length > 0) {
+        const hasMatchingUnit = incident.units?.some(unit =>
+          filters.units.includes(unit)
+        );
+        if (!hasMatchingUnit) {
+          return false;
+        }
+      }
+
+      if (filters.showOnlyStaging) {
+        const hasStagingInstructions = incident.rawTranscript?.toLowerCase().includes("check for possible staging instructions");
+        if (!hasStagingInstructions) {
+          return false;
+        }
+      }
+
       if (filters.dateRange === "DYNAMIC") {
         if (incident.estimatedResolutionMinutes) {
           const incidentDate = new Date(incident.published_date);
@@ -718,6 +745,24 @@ export function IncidentsList({
     return Array.from(agencies).sort();
   }, [incidents]);
 
+  const uniqueUnits = useMemo(() => {
+    const units = new Set<string>();
+    incidents.forEach((incident) => {
+      incident.units?.forEach((unit) => units.add(unit.trim()));
+    });
+    return Array.from(units).sort();
+  }, [incidents]);
+
+  const activeFiltersCount = useMemo(() => {
+    let count = 0;
+    if (filters.status !== "ACTIVE") count++;
+    if (filters.agency !== "ALL") count++;
+    if (filters.units.length > 0) count++;
+    if (filters.showOnlyStaging) count++;
+    if (filters.dateRange !== "DYNAMIC") count++;
+    return count;
+  }, [filters]);
+
   const clearFilters = () => {
     setFilters({
       search: "",
@@ -726,6 +771,8 @@ export function IncidentsList({
       startDate: undefined,
       endDate: undefined,
       agency: "ALL",
+      units: [],
+      showOnlyStaging: false,
     });
   };
 
@@ -845,119 +892,211 @@ export function IncidentsList({
           {displayedIncidents.length} incidents
         </span>
 
-        {/* Search */}
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-neutral-400" />
-          <Input
-            placeholder="Search incidents..."
-            value={filters.search}
-            onChange={(e) =>
-              setFilters((prev) => ({ ...prev, search: e.target.value }))
-            }
-            className="pl-10"
-          />
-        </div>
+        {/* Search and Filters */}
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-neutral-400" />
+            <Input
+              placeholder="Search incidents..."
+              value={filters.search}
+              onChange={(e) =>
+                setFilters((prev) => ({ ...prev, search: e.target.value }))
+              }
+              className="pl-10 h-11"
+            />
+          </div>
 
-        {/* Filters */}
-        <div className="flex gap-2 flex-wrap">
-          <Select
-            value={filters.status}
-            onValueChange={(value: IncidentStatus) =>
-              setFilters((prev) => ({ ...prev, status: value }))
-            }
-          >
-            <SelectTrigger className="w-24 md:w-32 min-h-11">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ALL">All Status</SelectItem>
-              <SelectItem value="ACTIVE">Active</SelectItem>
-              <SelectItem value="ARCHIVED">Archived</SelectItem>
-            </SelectContent>
-          </Select>
+          <Dialog open={isFiltersDialogOpen} onOpenChange={setIsFiltersDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2 min-h-11 relative">
+                <Filter className="h-4 w-4" />
+                <span className="hidden md:inline">Filters</span>
+                {activeFiltersCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-blue-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                    {activeFiltersCount}
+                  </span>
+                )}
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-md max-h-[80vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Filter Incidents</DialogTitle>
+                <DialogDescription>
+                  Customize which incidents are displayed
+                </DialogDescription>
+              </DialogHeader>
 
-          <Select
-            value={filters.agency}
-            onValueChange={(value) =>
-              setFilters((prev) => ({ ...prev, agency: value }))
-            }
-          >
-            <SelectTrigger className="w-24 md:w-32 min-h-11">
-              <SelectValue placeholder="Agency" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ALL">All Agencies</SelectItem>
-              {uniqueAgencies.map((agency, index) => (
-                <SelectItem key={`${agency}-${index}`} value={agency}>
-                  {agency}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select
-            value={filters.dateRange}
-            onValueChange={(value: DateRange) =>
-              setFilters((prev) => ({ ...prev, dateRange: value }))
-            }
-          >
-            <SelectTrigger className="w-28 md:w-32 min-h-11">
-              <SelectValue placeholder="Date Range" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="DYNAMIC">Dynamic</SelectItem>
-              <SelectItem value="LAST_30_MINS">Last 30 Mins</SelectItem>
-              <SelectItem value="LAST_HOUR">Last Hour</SelectItem>
-              <SelectItem value="LAST_4_HOURS">Last 4 Hours</SelectItem>
-              <SelectItem value="LAST_12_HOURS">Last 12 Hours</SelectItem>
-              <SelectItem value="TODAY">Today</SelectItem>
-              <SelectItem value="WEEK">Week</SelectItem>
-              <SelectItem value="CUSTOM">Custom</SelectItem>
-            </SelectContent>
-          </Select>
-
-          {filters.dateRange === "CUSTOM" && (
-            <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
-              <PopoverTrigger asChild>
-                <Button variant="outline" size="sm" className="gap-2 min-h-11">
-                  <Calendar className="h-4 w-4" />
-                  {filters.startDate
-                    ? format(filters.startDate, "MMM dd")
-                    : "Custom Date"}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <CalendarComponent
-                  mode="range"
-                  selected={{
-                    from: filters.startDate,
-                    to: filters.endDate,
-                  }}
-                  onSelect={(range) => {
-                    setFilters((prev) => ({
-                      ...prev,
-                      startDate: range?.from,
-                      endDate: range?.to,
-                    }));
-                    if (range?.from && range?.to) {
-                      setIsDatePickerOpen(false);
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Status</label>
+                  <Select
+                    value={filters.status}
+                    onValueChange={(value: IncidentStatus) =>
+                      setFilters((prev) => ({ ...prev, status: value }))
                     }
-                  }}
-                />
-              </PopoverContent>
-            </Popover>
-          )}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALL">All Status</SelectItem>
+                      <SelectItem value="ACTIVE">Active</SelectItem>
+                      <SelectItem value="ARCHIVED">Archived</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-          {(filters.search ||
-            filters.status !== "ALL" ||
-            filters.agency !== "ALL" ||
-            filters.dateRange !== "DYNAMIC" ||
-            filters.startDate ||
-            filters.endDate) && (
-            <Button variant="ghost" size="sm" onClick={clearFilters} className="min-h-11">
-              Clear
-            </Button>
-          )}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Agency</label>
+                  <Select
+                    value={filters.agency}
+                    onValueChange={(value) =>
+                      setFilters((prev) => ({ ...prev, agency: value }))
+                    }
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Agency" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALL">All Agencies</SelectItem>
+                      {uniqueAgencies.map((agency, index) => (
+                        <SelectItem key={`${agency}-${index}`} value={agency}>
+                          {agency}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Units</label>
+                  <div className="border rounded-md p-2 max-h-48 overflow-y-auto space-y-1">
+                    {uniqueUnits.length > 0 ? (
+                      uniqueUnits.map((unit) => (
+                        <div
+                          key={unit}
+                          className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-neutral-100 dark:hover:bg-neutral-800 ${
+                            filters.units.includes(unit) ? "bg-blue-50 dark:bg-blue-950" : ""
+                          }`}
+                          onClick={() => {
+                            setFilters((prev) => ({
+                              ...prev,
+                              units: prev.units.includes(unit)
+                                ? prev.units.filter((u) => u !== unit)
+                                : [...prev.units, unit],
+                            }));
+                          }}
+                        >
+                          <div className={`w-4 h-4 border rounded flex items-center justify-center flex-shrink-0 ${
+                            filters.units.includes(unit)
+                              ? "bg-blue-600 border-blue-600"
+                              : "border-neutral-300 dark:border-neutral-600"
+                          }`}>
+                            {filters.units.includes(unit) && (
+                              <div className="w-2 h-2 bg-white rounded-sm" />
+                            )}
+                          </div>
+                          <span className="text-sm">{unit}</span>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-sm text-muted-foreground text-center py-2">
+                        No units available
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <div
+                      className={`w-5 h-5 border rounded cursor-pointer flex items-center justify-center ${
+                        filters.showOnlyStaging
+                          ? "bg-blue-600 border-blue-600"
+                          : "border-neutral-300 dark:border-neutral-600"
+                      }`}
+                      onClick={() => setFilters((prev) => ({ ...prev, showOnlyStaging: !prev.showOnlyStaging }))}
+                    >
+                      {filters.showOnlyStaging && (
+                        <div className="w-2.5 h-2.5 bg-white rounded-sm" />
+                      )}
+                    </div>
+                    <label className="text-sm font-medium cursor-pointer" onClick={() => setFilters((prev) => ({ ...prev, showOnlyStaging: !prev.showOnlyStaging }))}>
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle className="h-4 w-4" />
+                        Show only staging instructions
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Date Range</label>
+                  <Select
+                    value={filters.dateRange}
+                    onValueChange={(value: DateRange) =>
+                      setFilters((prev) => ({ ...prev, dateRange: value }))
+                    }
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Date Range" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="DYNAMIC">Dynamic</SelectItem>
+                      <SelectItem value="LAST_30_MINS">Last 30 Mins</SelectItem>
+                      <SelectItem value="LAST_HOUR">Last Hour</SelectItem>
+                      <SelectItem value="LAST_4_HOURS">Last 4 Hours</SelectItem>
+                      <SelectItem value="LAST_12_HOURS">Last 12 Hours</SelectItem>
+                      <SelectItem value="TODAY">Today</SelectItem>
+                      <SelectItem value="WEEK">Week</SelectItem>
+                      <SelectItem value="CUSTOM">Custom</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {filters.dateRange === "CUSTOM" && (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Custom Date Range</label>
+                    <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="w-full justify-start gap-2">
+                          <Calendar className="h-4 w-4" />
+                          {filters.startDate && filters.endDate
+                            ? `${format(filters.startDate, "MMM dd")} - ${format(filters.endDate, "MMM dd")}`
+                            : "Select date range"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <CalendarComponent
+                          mode="range"
+                          selected={{
+                            from: filters.startDate,
+                            to: filters.endDate,
+                          }}
+                          onSelect={(range) => {
+                            setFilters((prev) => ({
+                              ...prev,
+                              startDate: range?.from,
+                              endDate: range?.to,
+                            }));
+                            if (range?.from && range?.to) {
+                              setIsDatePickerOpen(false);
+                            }
+                          }}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                )}
+
+                {activeFiltersCount > 0 && (
+                  <Button variant="outline" onClick={clearFilters} className="w-full">
+                    Clear All Filters
+                  </Button>
+                )}
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 

@@ -34,7 +34,7 @@ export interface ParsedDispatchCall {
   addressVariants: string[];
   estimatedResolutionMinutes: number;
   rawTranscript: string;
-  incidentType: 'fire' | 'medical';
+  incidentType: 'fire' | 'medical' | null;
 }
 
 export interface DispatchIncident {
@@ -53,5 +53,5 @@ export interface DispatchIncident {
   groupId: string;
   duration: number;
   estimatedResolutionMinutes: number;
-  incidentType: 'fire' | 'medical';
+  incidentType: 'fire' | 'medical' | null;
 }

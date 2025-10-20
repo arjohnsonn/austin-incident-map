@@ -6,7 +6,7 @@ export interface ParsedDispatchCall {
   addressVariants: string[];
   estimatedResolutionMinutes: number;
   rawTranscript: string;
-  incidentType: 'fire' | 'medical';
+  incidentType: 'fire' | 'medical' | null;
 }
 
 const UNIT_PATTERNS = [
@@ -70,9 +70,12 @@ function preprocessTranscript(transcript: string): string {
   processed = processed.replace(/\bAFV\b/gi, 'AFD');
   processed = processed.replace(/\bN\s*(\d+)\b/gi, 'Engine $1');
   processed = processed.replace(/\bQuinn\s+(\d+)\b/gi, 'Quint $1');
+  processed = processed.replace(/\bWind\s+(\d+)\b/gi, 'Quint $1');
+  processed = processed.replace(/\b(Quint)(\d+)\b/gi, '$1 $2');
+  processed = processed.replace(/\bItalian\s+(\d+)\b/gi, 'Battalion $1');
   processed = processed.replace(/\bWAD\s+(\d+)\b/gi, 'Squad $1');
   processed = processed.replace(/\bAPS\s+(\d+)/gi, 'at $1');
-  processed = processed.replace(/\bF-Pack\s+(\d+)\b/gi, 'F-TAC $1');
+  processed = processed.replace(/\bF-Pack[-\s]+(\d+)\b/gi, 'F-TAC-$1');
   processed = processed.replace(/\bFox\s+Alarm\b/gi, 'Box Alarm');
   processed = processed.replace(/\bFillbox\s+Alarm\b/gi, 'Stillbox Alarm');
   processed = processed.replace(/\bthree\s+down\b/gi, 'Tree Down');
@@ -121,9 +124,9 @@ export async function parseDispatchCallWithAI(
             content: `You are a fire/EMS dispatch call parser for Austin/Travis County, Texas. Extract structured information from dispatch audio transcripts.
 
 Extract:
-- callType: Extract ONLY the incident/call type itself - the core emergency type without any location details, box numbers, or extra context. Apply PROPER TITLE CASE CAPITALIZATION. DO NOT include: "in AFD box", "at [address]", "on [channel]", alarm box identifiers, geographic areas, or any location information. Examples: "unlock alarm in AFD box 18-01 at East 290 Service Road" → "Unlock Alarm" (NOT "Unlock Alarm In AFD Box 18-01"), "assist person stuck in elevator in AFD box 5106 at 4700 Westgate Blvd" → "Assist Person Stuck In Elevator", "lift assist code 1 in AFD box 801" → "Lift Assist Code 1", "gunshot wound" → "Gunshot Wound", "respiratory" → "Respiratory", "vehicle fire" → "Vehicle Fire". IMPORTANT: "Code 1", "Code One", "Code 2", "Code Two", etc. are priority levels and should NEVER be standalone call types - they must be combined with the actual incident type (e.g., "Sick Person Code 1", "Fall Code 2"). If an alarm level is mentioned (First Alarm, Second Alarm, etc.), use that as the call type. Extract ONLY the emergency type, nothing else.
+- callType: Extract ONLY the incident/call type itself - the core emergency type without any location details, box numbers, or extra context. Apply PROPER TITLE CASE CAPITALIZATION. DO NOT include: "in AFD box", "at [address]", "on [channel]", alarm box identifiers, geographic areas, or any location information. ALWAYS STRIP instruction words that modify the incident type, including: "check", "verify", "confirm", "standby", "stage", "staging" - these are operational instructions, NOT part of the call type (e.g., "Assault Check" → "Assault", "Assault check for possible staging instructions" → "Assault", "Fire Standby" → "Fire", "Medical Verify" → "Medical"). Examples: "unlock alarm in AFD box 18-01 at East 290 Service Road" → "Unlock Alarm" (NOT "Unlock Alarm In AFD Box 18-01"), "assist person stuck in elevator in AFD box 5106 at 4700 Westgate Blvd" → "Assist Person Stuck In Elevator", "lift assist code 1 in AFD box 801" → "Lift Assist Code 1", "gunshot wound" → "Gunshot Wound", "respiratory" → "Respiratory", "vehicle fire" → "Vehicle Fire", "Assault check" → "Assault", "Assault Check" → "Assault". IMPORTANT: "Code 1", "Code One", "Code 2", "Code Two", etc. are priority levels and should NEVER be standalone call types - they must be combined with the actual incident type (e.g., "Sick Person Code 1", "Fall Code 2"). If an alarm level is mentioned (First Alarm, Second Alarm, etc.), use that as the call type. Extract ONLY the emergency type, nothing else.
 - incidentType: Classify the incident as either "fire" or "medical". Fire incidents include: fires, alarms, smoke, vehicle fires, structure fires, brush fires, hazmat, gas leaks, explosions, rescues (not medical), technical rescues. Medical incidents include: medical emergencies, chest pain, respiratory issues, unconscious persons, injuries, falls, lift assists, cardiac arrest, strokes, seizures, overdoses, diabetic emergencies, any EMS/medical response.
-- units: Array of ALL responding units mentioned ANYWHERE in the transcript. CRITICAL: You must scan the ENTIRE transcript from start to end and extract EVERY unit mentioned. Units can appear at the beginning ("Engine 33, chest pain"), in the middle, or in a list at the end ("Response: Engine 3, Truck 3, Engine 14"). Example: "Second alarm, engine 33, fire standby... Response on FD-201, Engine 3, Truck 3, Engine 14" should extract ["Engine 33", "Engine 3", "Truck 3", "Engine 14"]. Common unit types: Engine, Truck, Ladder, Medic, Ambulance, Battalion, Squad, Rescue, Brush, Quint, FTO, Safety Officer, Command, Investigator, Wildfire Support, SR (Special Response). IMPORTANT: "SR-20" or "SR 20" is a UNIT (Special Response unit), not a call type. Example: "SR-20 fall at 123 Main St" means unit "SR20" responding to a "Fall" call. Note: "Quinn" in audio is actually "Quint" (a fire apparatus type). DO NOT extract "ESD" (Emergency Services District) numbers as units - "ESD 14" is a geographic area, not a unit. DO NOT extract "APS" followed by numbers as units - "APS 2803" is part of an address, not a unit. DO NOT extract "F-TAC", "FTAC", or "F-Pack" followed by numbers as units - these are radio CHANNELS, not units (e.g., "F-TAC 203" is a channel). DO NOT extract alarm box identifiers as units - patterns like "Box ST-51", "Box 2101", "Box BL1", "box 1234", "ST 51", "ST-51", "BL1", etc. are location/box identifiers, NOT units. Box identifiers typically appear after "in AFD box", "in ESD", or standalone and should be completely ignored. Only extract actual apparatus/unit callouts. Unit numbers should NOT contain dashes - remove any dashes from unit numbers (e.g., "14-01" becomes "1401", "12-02" becomes "1202", "SR-20" becomes "SR20").
+- units: Array of ALL responding units mentioned ANYWHERE in the transcript. CRITICAL: You must scan the ENTIRE transcript from start to end and extract EVERY unit mentioned. Units can appear at the beginning ("Engine 33, chest pain"), in the middle, or in a list at the end ("Response: Engine 3, Truck 3, Engine 14"). Example: "Second alarm, engine 33, fire standby... Response on FD-201, Engine 3, Truck 3, Engine 14" should extract ["Engine 33", "Engine 3", "Truck 3", "Engine 14"]. Common unit types: Engine, Truck, Ladder, Medic, Ambulance, Battalion, Squad, Rescue, Brush, Quint, FTO, Safety Officer, Command, Investigator, Wildfire Support, SR (Special Response). IMPORTANT: "SR-20" or "SR 20" is a UNIT (Special Response unit), not a call type. Example: "SR-20 fall at 123 Main St" means unit "SR20" responding to a "Fall" call. Note: "Quinn" in audio is actually "Quint" (a fire apparatus type). DO NOT extract "ESD" (Emergency Services District) numbers as units - "ESD 14" is a geographic area, not a unit. DO NOT extract "APS" followed by numbers as units - "APS 2803" is part of an address, not a unit. DO NOT extract "F-TAC", "FTAC", "F-Pack", "FPack", or "F Pack" followed by numbers as units - these are radio CHANNELS, not units (e.g., "F-TAC 203", "F-Pack 203", "FPack203" are all channels, NOT units). DO NOT extract alarm box identifiers as units - patterns like "Box ST-51", "Box 2101", "Box BL1", "box 1234", "ST 51", "ST-51", "BL1", etc. are location/box identifiers, NOT units. Box identifiers typically appear after "in AFD box", "in ESD", or standalone and should be completely ignored. Only extract actual apparatus/unit callouts. Unit numbers should NOT contain dashes - remove any dashes from unit numbers (e.g., "14-01" becomes "1401", "12-02" becomes "1202", "SR-20" becomes "SR20").
 - channels: Array of tactical/radio channels ONLY. Valid channels are: F-TAC (fire tactical), Firecom, Medcom. IMPORTANT: "F-TAC" or "FTAC" followed by numbers is a CHANNEL, not a unit (e.g., "F-TAC 203", "F-Pack 203" transcribed from audio is "F-TAC-203" channel). Include directional suffixes for Firecom channels (e.g., "Firecom North", "Firecom South", "Firecom East", "Firecom West") - NEVER truncate to just "Firecom". Format F-TAC channels as "F-TAC-###" (e.g., "F-TAC-201" NOT "FD-201" or "FD201"). DO NOT include "Box" numbers as channels - those are alarm box identifiers, not radio channels. Examples: ["F-TAC-203"], ["Firecom North"], ["Firecom South"], ["Medcom 2"]
 - address: Primary street address extracted from audio. IMPORTANT: Speech recognition often garbles addresses - you MUST attempt to correct obvious errors and reconstruct the intended address. Common errors: "Acts" → "at", misspelled street names (e.g., "Vanmieter" → "Van Meter", "Guadaloop" → "Guadalupe"), split words (e.g., "Plate" → "Place", "Burr Net" → "Burnet"), run-together numbers and streets. Examples: "Acts 18609 Vanmieter Plate" → "18609 Van Meter Place", "APS 2803 Parker Lane" → "2803 Parker Lane", "12212 to 12316 Anderson Mill Road" → "12212-12316 Anderson Mill Road". If you can identify a street number (e.g., "18609") followed by what appears to be a garbled street name (e.g., "Vanmieter Plate"), attempt to reconstruct it as a valid address. Format address ranges with dashes (e.g., "2200-2400 North Interstate 35" NOT "2200 to 2400").
 - addressVariants: Array of 5-10 comprehensive address variations for geocoding, optimized for Austin/Travis County, TX. GENERATE VARIANTS COVERING ALL ABBREVIATION COMBINATIONS. Include: (1) Original address as heard, (2) Variants with ALL street type abbreviations: St/Street, Blvd/Boulevard, Rd/Road, Dr/Drive, Ln/Lane, Ave/Avenue, Ct/Court, Pl/Place, Pkwy/Parkway, Trl/Trail, Loop, Cir/Circle, Frontage/Frntg, Service/Svc, (3) Variants with ALL directional abbreviations: N/North, S/South, E/East, W/West, NE/Northeast, NW/Northwest, SE/Southeast, SW/Southwest, (4) Combinations of abbreviated and expanded forms (e.g., for "Woodward St & E Ben White Blvd Frontage Rd" generate: "Woodward Street & East Ben White Boulevard Frontage Road", "Woodward St & East Ben White Blvd Frontage Rd", "Woodward Street & E Ben White Boulevard Frontage Rd", etc.), (5) Austin/Travis County location suffixes ("Austin TX", "Travis County TX"), (6) Corrected spellings of known Austin streets (e.g., "Guadalupe" often mistranscribed, "Lamar" variants, "MoPac"/"Loop 1", "I-35"/"Interstate 35" variants), (7) Variants without directional prefixes if applicable. For address ranges, include variants with just the first number (e.g., for "2200-2400 Main St", include "2200 Main St"). Examples: ["2328 Hartford Road", "2328 Hartford Rd", "2328 Hartford Road Austin TX", "2328 Hartford Rd Travis County TX"]. For highways: ["I-35 North", "Interstate 35 North", "I-35", "US Highway 35"]. For complex intersections: ["Woodward St & E Ben White Blvd Frontage Rd", "Woodward Street & East Ben White Boulevard Frontage Road", "Woodward St & East Ben White Blvd Service Rd", "Woodward Street & E Ben White Blvd Frontage Rd"]. Always ensure variants are appropriate for Austin/Travis County geography.
@@ -149,11 +152,15 @@ Return valid JSON only. If something isn't mentioned, use null or empty array. e
     const data = await response.json();
     const result = JSON.parse(data.choices[0].message.content || '{}');
 
-    const cleanedUnits = (result.units || []).map((unit: string) => {
-      return unit.replace(/(\w+)\s+(\d+)-(\d+)/g, '$1 $2$3');
-    });
+    const cleanedUnits = (result.units || [])
+      .map((unit: string) => {
+        return unit.replace(/(\w+)\s+(\d+)-(\d+)/g, '$1 $2$3');
+      })
+      .filter((unit: string) => {
+        return !/^F[-\s]?Pack\s+\d+$/i.test(unit) && !/^FPack\s*\d+$/i.test(unit);
+      });
 
-    const incidentType = result.incidentType === 'medical' ? 'medical' : 'fire';
+    const incidentType = result.incidentType === 'medical' ? 'medical' : result.incidentType === 'fire' ? 'fire' : null;
 
     console.log('AI Parsed Result:', {
       callType: result.callType || null,
@@ -334,7 +341,7 @@ export function parseDispatchCall(transcript: string): ParsedDispatchCall {
 
   return {
     callType,
-    incidentType: 'fire',
+    incidentType: null,
     units,
     channels,
     address,

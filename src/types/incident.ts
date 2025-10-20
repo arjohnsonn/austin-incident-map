@@ -12,7 +12,7 @@ export interface FireIncident {
   traffic_report_status: 'ACTIVE' | 'ARCHIVED';
   traffic_report_status_date_time: string;
   agency: string;
-  incidentType: 'fire' | 'medical' | 'traffic';
+  incidentType: 'fire' | 'medical' | 'traffic' | null;
   units?: string[];
   channels?: string[];
   audioUrl?: string;
@@ -30,4 +30,6 @@ export interface FilterState {
   startDate: Date | undefined;
   endDate: Date | undefined;
   agency: string;
+  units: string[];
+  showOnlyStaging: boolean;
 }
