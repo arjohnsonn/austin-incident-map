@@ -7,6 +7,7 @@ export interface AppSettings {
   showBanner: boolean;
   hideIncompleteIncidents: boolean;
   hideIncidentsWithoutUnitsOrCallType: boolean;
+  showDebugReplay: boolean;
 }
 
 const SETTINGS_KEY = 'app_settings';
@@ -16,6 +17,7 @@ const defaultSettings: AppSettings = {
   showBanner: true,
   hideIncompleteIncidents: true,
   hideIncidentsWithoutUnitsOrCallType: true,
+  showDebugReplay: false,
 };
 
 interface SettingsContextType {

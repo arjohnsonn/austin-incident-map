@@ -123,7 +123,25 @@ export function SettingsDialog({ incidents = [], onReplayIncident }: SettingsDia
             />
           </div>
 
-          {recentIncidents.length > 0 && (
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <label htmlFor="show-debug-replay" className="text-sm font-medium">
+                Show debug replay
+              </label>
+              <p className="text-sm text-muted-foreground">
+                Show incident replay tool for testing notifications
+              </p>
+            </div>
+            <Switch
+              id="show-debug-replay"
+              checked={settings.showDebugReplay}
+              onCheckedChange={(checked) =>
+                updateSettings({ showDebugReplay: checked })
+              }
+            />
+          </div>
+
+          {settings.showDebugReplay && recentIncidents.length > 0 && (
             <div className="border-t pt-4">
               <div className="space-y-2">
                 <h3 className="text-sm font-semibold">Debug: Replay Incident</h3>

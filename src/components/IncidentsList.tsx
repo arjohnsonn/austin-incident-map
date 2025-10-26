@@ -51,6 +51,7 @@ interface IncidentsListProps {
   onNewIncident?: (incident: FireIncident, newIds: Set<string>) => void;
   onAudioStateChange?: (playing: boolean) => void;
   loading?: boolean;
+  isInitialFetchComplete?: boolean;
   lastUpdated?: Date | null;
   onRefresh?: () => void;
   onResetStorage?: () => void;
@@ -69,6 +70,7 @@ const VirtualizedList = memo(
     onNewIncident,
     onAudioStateChange,
     loading,
+    isInitialFetchComplete,
   }: {
     incidents: FireIncident[];
     allIncidents: FireIncident[];
@@ -78,6 +80,7 @@ const VirtualizedList = memo(
     onNewIncident?: (incident: FireIncident, newIds: Set<string>) => void;
     onAudioStateChange?: (playing: boolean) => void;
     loading?: boolean;
+    isInitialFetchComplete?: boolean;
   }) => {
     const [scrollTop, setScrollTop] = useState(0);
     const [containerHeight, setContainerHeight] = useState(600);
@@ -216,7 +219,7 @@ const VirtualizedList = memo(
       const currentIds = new Set(allIncidents.map(inc => inc.traffic_report_id));
 
       if (!isInitializedRef.current) {
-        if (!loading) {
+        if (isInitialFetchComplete) {
           isInitializedRef.current = true;
           prevIncidentIdsRef.current = currentIds;
         }
@@ -283,7 +286,7 @@ const VirtualizedList = memo(
       } else {
         prevIncidentIdsRef.current = currentIds;
       }
-    }, [allIncidents, autoPlayAudio, onNewIncident, onAudioStateChange, loading]);
+    }, [allIncidents, autoPlayAudio, onNewIncident, onAudioStateChange, isInitialFetchComplete]);
 
 
     const startIndex = Math.max(
@@ -533,6 +536,7 @@ export function IncidentsList({
   onNewIncident,
   onAudioStateChange,
   loading,
+  isInitialFetchComplete,
   lastUpdated,
   onRefresh,
   onResetStorage,
@@ -554,6 +558,7 @@ export function IncidentsList({
   const [isFiltersDialogOpen, setIsFiltersDialogOpen] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
+  const [unitSearch, setUnitSearch] = useState("");
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const playPromiseRef = useRef<Promise<void> | null>(null);
 
@@ -752,6 +757,12 @@ export function IncidentsList({
     });
     return Array.from(units).sort();
   }, [incidents]);
+
+  const filteredUnits = useMemo(() => {
+    if (!unitSearch.trim()) return uniqueUnits;
+    const searchLower = unitSearch.toLowerCase();
+    return uniqueUnits.filter(unit => unit.toLowerCase().includes(searchLower));
+  }, [uniqueUnits, unitSearch]);
 
   const activeFiltersCount = useMemo(() => {
     let count = 0;
@@ -970,9 +981,15 @@ export function IncidentsList({
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Units</label>
+                  <Input
+                    placeholder="Search units..."
+                    value={unitSearch}
+                    onChange={(e) => setUnitSearch(e.target.value)}
+                    className="h-9"
+                  />
                   <div className="border rounded-md p-2 max-h-48 overflow-y-auto space-y-1">
-                    {uniqueUnits.length > 0 ? (
-                      uniqueUnits.map((unit) => (
+                    {filteredUnits.length > 0 ? (
+                      filteredUnits.map((unit) => (
                         <div
                           key={unit}
                           className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-neutral-100 dark:hover:bg-neutral-800 ${
@@ -1156,6 +1173,7 @@ export function IncidentsList({
             onNewIncident={onNewIncident}
             onAudioStateChange={onAudioStateChange}
             loading={loading}
+            isInitialFetchComplete={isInitialFetchComplete}
           />
         )}
       </div>

@@ -193,6 +193,7 @@ export function useFireIncidents() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [isManualRefresh, setIsManualRefresh] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isInitialFetchComplete, setIsInitialFetchComplete] = useState(false);
   const isInitializedRef = useRef(false);
   const isFetchingRef = useRef(false);
 
@@ -220,10 +221,12 @@ export function useFireIncidents() {
 
       setLastUpdated(new Date());
       setIsLoading(false);
+      setIsInitialFetchComplete(true);
       console.log('=== FETCH END ===\n');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch data');
       setIsLoading(false);
+      setIsInitialFetchComplete(true);
     } finally {
       isFetchingRef.current = false;
       if (manual) {
@@ -288,6 +291,7 @@ export function useFireIncidents() {
 
     setIncidents([]);
     setIsLoading(true);
+    setIsInitialFetchComplete(false);
 
     console.log('Storage cleared, re-initializing...');
 
@@ -303,6 +307,7 @@ export function useFireIncidents() {
     lastUpdated,
     isManualRefresh,
     isLoading,
+    isInitialFetchComplete,
     refetch: manualRefetch,
     resetStorage
   };

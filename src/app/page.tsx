@@ -25,6 +25,7 @@ function HomeContent() {
     lastUpdated,
     isManualRefresh,
     isLoading,
+    isInitialFetchComplete,
     refetch,
     resetStorage,
   } = useFireIncidents();
@@ -168,6 +169,7 @@ function HomeContent() {
               onNewIncident={handleNewIncident}
               onAudioStateChange={handleAudioStateChange}
               loading={isLoading}
+              isInitialFetchComplete={isInitialFetchComplete}
               lastUpdated={lastUpdated}
               onRefresh={refetch}
               onResetStorage={resetStorage}
@@ -193,6 +195,7 @@ function HomeContent() {
               onNewIncident={handleNewIncident}
               onAudioStateChange={handleAudioStateChange}
               loading={isLoading}
+              isInitialFetchComplete={isInitialFetchComplete}
               lastUpdated={lastUpdated}
               onRefresh={refetch}
               onResetStorage={resetStorage}
