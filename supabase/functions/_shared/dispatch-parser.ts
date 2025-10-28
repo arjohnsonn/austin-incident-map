@@ -68,6 +68,7 @@ function preprocessTranscript(transcript: string): string {
 
   processed = processed.replace(/\bASD\b/gi, 'AFD');
   processed = processed.replace(/\bAFV\b/gi, 'AFD');
+  processed = processed.replace(/\bARV\b/gi, 'ARFF');
   processed = processed.replace(/\bN\s*(\d+)\b/gi, 'Engine $1');
   processed = processed.replace(/\bQuinn\s+(\d+)\b/gi, 'Quint $1');
   processed = processed.replace(/\bWind\s+(\d+)\b/gi, 'Quint $1');
