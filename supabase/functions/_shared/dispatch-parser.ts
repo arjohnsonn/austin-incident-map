@@ -76,6 +76,7 @@ function preprocessTranscript(transcript: string): string {
   processed = processed.replace(/\bWAD\s+(\d+)\b/gi, 'Squad $1');
   processed = processed.replace(/\bAPS\s+(\d+)/gi, 'at $1');
   processed = processed.replace(/\bF-Pack[-\s]+(\d+)\b/gi, 'F-TAC-$1');
+  processed = processed.replace(/\bS[-\s]?Pack[-\s]+(\d+)\b/gi, 'F-TAC-$1');
   processed = processed.replace(/\bFox\s+Alarm\b/gi, 'Box Alarm');
   processed = processed.replace(/\bFillbox\s+Alarm\b/gi, 'Stillbox Alarm');
   processed = processed.replace(/\bthree\s+down\b/gi, 'Tree Down');
@@ -84,6 +85,28 @@ function preprocessTranscript(transcript: string): string {
 
   processed = processed.replace(/\bActs\s+(\d+)/gi, 'at $1');
   processed = processed.replace(/\bPlate\b/gi, 'Place');
+
+  processed = processed.replace(/\b(\d{1,2})00(\d{3,5})\s+(East|West|North|South|[A-Z])/gi, '$1$2 $3');
+
+  processed = processed.replace(/\b(\d{4})(\d{4})\s+(East|West|North|South|[A-Z])/gi, '$1-$2 $3');
+  processed = processed.replace(/\b(\d{3})(\d{3})\s+(East|West|North|South|[A-Z])/gi, '$1-$2 $3');
+  processed = processed.replace(/\b(\d{4})(\d{3})\s+(East|West|North|South|[A-Z])/gi, '$1-$2 $3');
+  processed = processed.replace(/\b(\d{4})(\d{2})\s+(East|West|North|South|[A-Z])/gi, '$1-$2 $3');
+
+  processed = processed.replace(/\b(\d0)\s+(First|Second|Third|Fourth|Fifth|Sixth|Seventh|Eighth|Ninth)\b/gi, (match, tens, ordinal) => {
+    const tensValue = parseInt(tens);
+    const onesMap: Record<string, number> = {
+      'first': 1, 'second': 2, 'third': 3, 'fourth': 4, 'fifth': 5,
+      'sixth': 6, 'seventh': 7, 'eighth': 8, 'ninth': 9
+    };
+    const ones = onesMap[ordinal.toLowerCase()];
+    const combined = tensValue + ones;
+    const suffix =
+      combined % 10 === 1 && combined % 100 !== 11 ? 'st' :
+      combined % 10 === 2 && combined % 100 !== 12 ? 'nd' :
+      combined % 10 === 3 && combined % 100 !== 13 ? 'rd' : 'th';
+    return `${combined}${suffix}`;
+  });
 
   processed = processed.replace(/\b(?:Bach|batch)\s*,?\s*ST[-\s]*(\d+)/gi, 'Box ST-$1');
   processed = processed.replace(/\bChesapeake\b/gi, 'Chest Pain');
