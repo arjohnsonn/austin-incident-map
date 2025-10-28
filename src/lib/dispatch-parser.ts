@@ -83,6 +83,11 @@ function preprocessTranscript(transcript: string): string {
   processed = processed.replace(/\b3\s+down\b/gi, 'Tree Down');
   processed = processed.replace(/\bpower\s+lines?\s+down\b/gi, 'powerline down');
 
+  processed = processed.replace(/\bof\s+this\s+(EMS|CMS)\b/gi, 'Assist EMS');
+  processed = processed.replace(/\bRogue\b(?!\s+\d)/gi, 'Stroke');
+  processed = processed.replace(/\bRover\b(?!\s+\d)/gi, 'Stroke');
+  processed = processed.replace(/\bPaul\b/gi, 'Fall');
+
   processed = processed.replace(/\bActs\s+(\d+)/gi, 'at $1');
   processed = processed.replace(/\bPlate\b/gi, 'Place');
 
@@ -109,7 +114,7 @@ function preprocessTranscript(transcript: string): string {
   });
 
   processed = processed.replace(/\b(?:Bach|batch)\s*,?\s*ST[-\s]*(\d+)/gi, 'Box ST-$1');
-  processed = processed.replace(/\bChesapeake\b/gi, 'Chest Pain');
+  processed = processed.replace(/\b(?:Chesapeake|Chesapeakene|Chespane|Champaign)\b/gi, 'Chest Pain');
   processed = processed.replace(/\bESC\s+(\d+)/gi, 'ESD $1');
   processed = processed.replace(/\b[BbRr]roke\b/g, 'stroke');
 
