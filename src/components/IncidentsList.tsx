@@ -160,7 +160,7 @@ const VirtualizedList = memo(
 
     const formatDate = (dateString: string) => {
       try {
-        return format(new Date(dateString), "MM/dd HH:mm");
+        return format(new Date(dateString), "MM/dd HHmm");
       } catch {
         return "Invalid date";
       }
