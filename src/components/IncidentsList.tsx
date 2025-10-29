@@ -6,6 +6,7 @@ import { Search, Calendar, RefreshCw, Play, Pause, Trash2, Volume2, AlertTriangl
 import { useSettings } from "@/lib/settings";
 import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { IncidentCard } from "@/components/IncidentCard";
+import { getChannelUrl } from "@/lib/channels";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -395,9 +396,33 @@ const VirtualizedList = memo(
               )}
             </Tooltip>
             <div style={{ width: columnWidths.channels }} className="px-2 truncate text-purple-600 dark:text-purple-400 text-xs flex-shrink-0 relative group">
-              {incident.channels && incident.channels.length > 0
-                ? incident.channels.join(', ')
-                : '-'}
+              {incident.channels && incident.channels.length > 0 ? (
+                <span>
+                  {incident.channels.map((channel, idx) => {
+                    const url = getChannelUrl(channel);
+                    return (
+                      <span key={channel}>
+                        {idx > 0 && ", "}
+                        {url ? (
+                          <a
+                            href={url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="underline hover:text-purple-700 dark:hover:text-purple-300"
+                          >
+                            {channel}
+                          </a>
+                        ) : (
+                          channel
+                        )}
+                      </span>
+                    );
+                  })}
+                </span>
+              ) : (
+                '-'
+              )}
               <div
                 className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-500 opacity-0 group-hover:opacity-100"
                 onMouseDown={(e) => handleResizeStart(e, 'channels')}

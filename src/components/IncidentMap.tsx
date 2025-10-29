@@ -5,6 +5,7 @@ import { useTheme } from "next-themes";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { FireIncident } from "@/types/incident";
+import { getChannelUrl } from "@/lib/channels";
 
 interface IncidentMapProps {
   incidents: FireIncident[];
@@ -528,7 +529,13 @@ export function IncidentMap({
           ? incident.units.join(', ')
           : '-';
         const channels = incident.channels && incident.channels.length > 0
-          ? incident.channels.join(', ')
+          ? incident.channels.map((channel, idx) => {
+              const url = getChannelUrl(channel);
+              const separator = idx > 0 ? ', ' : '';
+              return url
+                ? `${separator}<a href="${url}" target="_blank" rel="noopener noreferrer" style="text-decoration: underline; color: inherit;">${channel}</a>`
+                : `${separator}${channel}`;
+            }).join('')
           : '-';
 
         popupContent = `

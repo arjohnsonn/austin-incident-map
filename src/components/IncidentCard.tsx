@@ -4,6 +4,7 @@ import { FireIncident } from "@/types/incident";
 import { format } from "date-fns";
 import { Play, Pause } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { getChannelUrl } from "@/lib/channels";
 
 interface IncidentCardProps {
   incident: FireIncident;
@@ -98,7 +99,27 @@ export function IncidentCard({
                 <div className="flex items-center gap-1">
                   <span className="text-muted-foreground">Channel:</span>
                   <span className="text-purple-600 dark:text-purple-400">
-                    {incident.channels.join(", ")}
+                    {incident.channels.map((channel, idx) => {
+                      const url = getChannelUrl(channel);
+                      return (
+                        <span key={channel}>
+                          {idx > 0 && ", "}
+                          {url ? (
+                            <a
+                              href={url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="underline hover:text-purple-700 dark:hover:text-purple-300"
+                            >
+                              {channel}
+                            </a>
+                          ) : (
+                            channel
+                          )}
+                        </span>
+                      );
+                    })}
                   </span>
                 </div>
               )}

@@ -95,11 +95,25 @@ function preprocessTranscript(transcript: string): string {
   processed = processed.replace(/\b(\d{1,2})00(\d{3,5})\s+(East|West|North|South|[A-Z])/gi, '$1$2 $3');
 
   processed = processed.replace(/\b(\d{4})(\d{4})\s+(East|West|North|South|[A-Z])/gi, '$1-$2 $3');
+  processed = processed.replace(/\b(\d\d)(\d\d)(\d\d)\s+(East|West|North|South|[A-Z])/gi, (_match, first, middle, last, direction) => {
+    const firstNum = parseInt(first);
+    const middleNum = parseInt(middle);
+
+    if (firstNum === middleNum) {
+      return `${first}00-${middle}${last} ${direction}`;
+    }
+
+    if (middleNum > firstNum && middleNum - firstNum <= 3) {
+      return `${first}00-${middle}${last} ${direction}`;
+    }
+
+    return `${first}${middle}-${last} ${direction}`;
+  });
   processed = processed.replace(/\b(\d{3})(\d{3})\s+(East|West|North|South|[A-Z])/gi, '$1-$2 $3');
   processed = processed.replace(/\b(\d{4})(\d{3})\s+(East|West|North|South|[A-Z])/gi, '$1-$2 $3');
   processed = processed.replace(/\b(\d{4})(\d{2})\s+(East|West|North|South|[A-Z])/gi, '$1-$2 $3');
 
-  processed = processed.replace(/\b(\d0)\s+(First|Second|Third|Fourth|Fifth|Sixth|Seventh|Eighth|Ninth)\b/gi, (match, tens, ordinal) => {
+  processed = processed.replace(/\b(\d0)\s+(First|Second|Third|Fourth|Fifth|Sixth|Seventh|Eighth|Ninth)\b/gi, (_match, tens, ordinal) => {
     const tensValue = parseInt(tens);
     const onesMap: Record<string, number> = {
       'first': 1, 'second': 2, 'third': 3, 'fourth': 4, 'fifth': 5,
