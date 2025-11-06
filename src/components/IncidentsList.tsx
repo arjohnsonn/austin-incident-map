@@ -574,6 +574,8 @@ export function IncidentsList({
     dateRange: "DYNAMIC",
     startDate: undefined,
     endDate: undefined,
+    startTime: undefined,
+    endTime: undefined,
     agency: "ALL",
     units: [],
     showOnlyStaging: false,
@@ -593,6 +595,8 @@ export function IncidentsList({
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
     switch (range) {
+      case "ALL":
+        return { start: undefined, end: undefined };
       case "DYNAMIC":
         return { start: undefined, end: undefined };
       case "LAST_30_MINS":
@@ -626,11 +630,26 @@ export function IncidentsList({
           end: new Date(),
         };
       case "CUSTOM":
-        return { start: filters.startDate, end: filters.endDate };
+        let start = filters.startDate;
+        let end = filters.endDate;
+
+        if (start && filters.startTime) {
+          const [hours, minutes] = filters.startTime.split(':').map(Number);
+          start = new Date(start);
+          start.setHours(hours, minutes, 0, 0);
+        }
+
+        if (end && filters.endTime) {
+          const [hours, minutes] = filters.endTime.split(':').map(Number);
+          end = new Date(end);
+          end.setHours(hours, minutes, 59, 999);
+        }
+
+        return { start, end };
       default:
         return { start: undefined, end: undefined };
     }
-  }, [filters.startDate, filters.endDate]);
+  }, [filters.startDate, filters.endDate, filters.startTime, filters.endTime]);
 
   const allFilteredIncidents = useMemo(() => {
     const filtered = incidents.filter((incident) => {
@@ -712,7 +731,9 @@ export function IncidentsList({
         }
       }
 
-      if (filters.dateRange === "DYNAMIC") {
+      if (filters.dateRange === "ALL") {
+        return true;
+      } else if (filters.dateRange === "DYNAMIC") {
         if (incident.estimatedResolutionMinutes) {
           const incidentDate = new Date(incident.published_date);
           const now = new Date();
@@ -795,7 +816,7 @@ export function IncidentsList({
     if (filters.agency !== "ALL") count++;
     if (filters.units.length > 0) count++;
     if (filters.showOnlyStaging) count++;
-    if (filters.dateRange !== "DYNAMIC") count++;
+    if (filters.dateRange !== "DYNAMIC" && filters.dateRange !== "ALL") count++;
     return count;
   }, [filters]);
 
@@ -806,6 +827,8 @@ export function IncidentsList({
       dateRange: "DYNAMIC",
       startDate: undefined,
       endDate: undefined,
+      startTime: undefined,
+      endTime: undefined,
       agency: "ALL",
       units: [],
       showOnlyStaging: false,
@@ -1084,6 +1107,7 @@ export function IncidentsList({
                       <SelectValue placeholder="Date Range" />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="ALL">All</SelectItem>
                       <SelectItem value="DYNAMIC">Dynamic</SelectItem>
                       <SelectItem value="LAST_30_MINS">Last 30 Mins</SelectItem>
                       <SelectItem value="LAST_HOUR">Last Hour</SelectItem>
@@ -1097,37 +1121,59 @@ export function IncidentsList({
                 </div>
 
                 {filters.dateRange === "CUSTOM" && (
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Custom Date Range</label>
-                    <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
-                      <PopoverTrigger asChild>
-                        <Button variant="outline" className="w-full justify-start gap-2">
-                          <Calendar className="h-4 w-4" />
-                          {filters.startDate && filters.endDate
-                            ? `${format(filters.startDate, "MMM dd")} - ${format(filters.endDate, "MMM dd")}`
-                            : "Select date range"}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <CalendarComponent
-                          mode="range"
-                          selected={{
-                            from: filters.startDate,
-                            to: filters.endDate,
-                          }}
-                          onSelect={(range) => {
-                            setFilters((prev) => ({
-                              ...prev,
-                              startDate: range?.from,
-                              endDate: range?.to,
-                            }));
-                            if (range?.from && range?.to) {
-                              setIsDatePickerOpen(false);
-                            }
-                          }}
-                        />
-                      </PopoverContent>
-                    </Popover>
+                  <div className="space-y-3">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Custom Date Range</label>
+                      <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" className="w-full justify-start gap-2">
+                            <Calendar className="h-4 w-4" />
+                            {filters.startDate && filters.endDate
+                              ? `${format(filters.startDate, "MMM dd")} - ${format(filters.endDate, "MMM dd")}`
+                              : "Select date range"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <CalendarComponent
+                            mode="range"
+                            selected={{
+                              from: filters.startDate,
+                              to: filters.endDate,
+                            }}
+                            onSelect={(range) => {
+                              setFilters((prev) => ({
+                                ...prev,
+                                startDate: range?.from,
+                                endDate: range?.to,
+                              }));
+                              if (range?.from && range?.to) {
+                                setIsDatePickerOpen(false);
+                              }
+                            }}
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Start Time (Optional)</label>
+                      <Input
+                        type="time"
+                        value={filters.startTime || ""}
+                        onChange={(e) => setFilters((prev) => ({ ...prev, startTime: e.target.value }))}
+                        className="w-full"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">End Time (Optional)</label>
+                      <Input
+                        type="time"
+                        value={filters.endTime || ""}
+                        onChange={(e) => setFilters((prev) => ({ ...prev, endTime: e.target.value }))}
+                        className="w-full"
+                      />
+                    </div>
                   </div>
                 )}
 

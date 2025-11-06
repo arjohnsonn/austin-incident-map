@@ -21,7 +21,7 @@ export interface FireIncident {
 }
 
 export type IncidentStatus = 'ACTIVE' | 'ARCHIVED' | 'ALL';
-export type DateRange = 'DYNAMIC' | 'LAST_30_MINS' | 'LAST_HOUR' | 'LAST_4_HOURS' | 'LAST_12_HOURS' | 'TODAY' | 'WEEK' | 'CUSTOM';
+export type DateRange = 'ALL' | 'DYNAMIC' | 'LAST_30_MINS' | 'LAST_HOUR' | 'LAST_4_HOURS' | 'LAST_12_HOURS' | 'TODAY' | 'WEEK' | 'CUSTOM';
 
 export interface FilterState {
   search: string;
@@ -29,6 +29,8 @@ export interface FilterState {
   dateRange: DateRange;
   startDate: Date | undefined;
   endDate: Date | undefined;
+  startTime?: string;
+  endTime?: string;
   agency: string;
   units: string[];
   showOnlyStaging: boolean;
