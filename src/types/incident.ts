@@ -31,6 +31,7 @@ export interface FilterState {
   endDate: Date | undefined;
   startTime?: string;
   endTime?: string;
+  daysOfWeek: number[];
   agency: string;
   units: string[];
   showOnlyStaging: boolean;

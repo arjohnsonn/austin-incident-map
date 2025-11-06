@@ -576,6 +576,7 @@ export function IncidentsList({
     endDate: undefined,
     startTime: undefined,
     endTime: undefined,
+    daysOfWeek: [],
     agency: "ALL",
     units: [],
     showOnlyStaging: false,
@@ -731,6 +732,14 @@ export function IncidentsList({
         }
       }
 
+      if (filters.daysOfWeek.length > 0) {
+        const incidentDate = new Date(incident.published_date);
+        const dayOfWeek = incidentDate.getDay();
+        if (!filters.daysOfWeek.includes(dayOfWeek)) {
+          return false;
+        }
+      }
+
       if (filters.dateRange === "ALL") {
         return true;
       } else if (filters.dateRange === "DYNAMIC") {
@@ -817,6 +826,7 @@ export function IncidentsList({
     if (filters.units.length > 0) count++;
     if (filters.showOnlyStaging) count++;
     if (filters.dateRange !== "DYNAMIC" && filters.dateRange !== "ALL") count++;
+    if (filters.daysOfWeek.length > 0) count++;
     return count;
   }, [filters]);
 
@@ -829,6 +839,7 @@ export function IncidentsList({
       endDate: undefined,
       startTime: undefined,
       endTime: undefined,
+      daysOfWeek: [],
       agency: "ALL",
       units: [],
       showOnlyStaging: false,
@@ -1176,6 +1187,47 @@ export function IncidentsList({
                     </div>
                   </div>
                 )}
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Days of Week</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { label: 'Sunday', value: 0 },
+                      { label: 'Monday', value: 1 },
+                      { label: 'Tuesday', value: 2 },
+                      { label: 'Wednesday', value: 3 },
+                      { label: 'Thursday', value: 4 },
+                      { label: 'Friday', value: 5 },
+                      { label: 'Saturday', value: 6 },
+                    ].map((day) => (
+                      <div
+                        key={day.value}
+                        className={`flex items-center gap-2 px-3 py-2 rounded cursor-pointer hover:bg-neutral-100 dark:hover:bg-neutral-800 ${
+                          filters.daysOfWeek.includes(day.value) ? "bg-blue-50 dark:bg-blue-950" : ""
+                        }`}
+                        onClick={() => {
+                          setFilters((prev) => ({
+                            ...prev,
+                            daysOfWeek: prev.daysOfWeek.includes(day.value)
+                              ? prev.daysOfWeek.filter((d) => d !== day.value)
+                              : [...prev.daysOfWeek, day.value],
+                          }));
+                        }}
+                      >
+                        <div className={`w-4 h-4 border rounded flex items-center justify-center flex-shrink-0 ${
+                          filters.daysOfWeek.includes(day.value)
+                            ? "bg-blue-600 border-blue-600"
+                            : "border-neutral-300 dark:border-neutral-600"
+                        }`}>
+                          {filters.daysOfWeek.includes(day.value) && (
+                            <div className="w-2 h-2 bg-white rounded-sm" />
+                          )}
+                        </div>
+                        <span className="text-sm">{day.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
 
                 {activeFiltersCount > 0 && (
                   <Button variant="outline" onClick={clearFilters} className="w-full">
