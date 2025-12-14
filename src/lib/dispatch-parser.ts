@@ -71,6 +71,7 @@ function preprocessTranscript(transcript: string): string {
   processed = processed.replace(/\bN\s*(\d+)\b/gi, 'Engine $1');
   processed = processed.replace(/\bQuinn\s+(\d+)\b/gi, 'Quint $1');
   processed = processed.replace(/\bWind\s+(\d+)\b/gi, 'Quint $1');
+  processed = processed.replace(/\bTwin\s+(\d+)\b/gi, 'Quint $1');
   processed = processed.replace(/\b(Quint)(\d+)\b/gi, '$1 $2');
   processed = processed.replace(/\b(Engine)(\d+)\b/gi, '$1 $2');
   processed = processed.replace(/\b(Truck)(\d+)\b/gi, '$1 $2');
@@ -188,7 +189,13 @@ Return valid JSON only. If something isn't mentioned, use null or empty array. e
 
     const cleanedUnits = (result.units || [])
       .map((unit: string) => {
-        return unit.replace(/(\w+)\s+(\d+)-(\d+)/g, '$1 $2$3');
+        let cleaned = unit.replace(/(\w+)\s+(\d+)-(\d+)/g, '$1 $2$3');
+        cleaned = cleaned.replace(/^Italian\s+(\d+)$/i, 'Battalion $1');
+        cleaned = cleaned.replace(/^Quinn\s+(\d+)$/i, 'Quint $1');
+        cleaned = cleaned.replace(/^Wind\s+(\d+)$/i, 'Quint $1');
+        cleaned = cleaned.replace(/^Twin\s+(\d+)$/i, 'Quint $1');
+        cleaned = cleaned.replace(/^ARV\s+(\d+)$/i, 'ARFF $1');
+        return cleaned;
       })
       .filter((unit: string) => {
         return !/^F[-\s]?Pack[-\s]*\d+$/i.test(unit) && !/^FPack[-\s]*\d+$/i.test(unit);
