@@ -25,7 +25,7 @@ export function IncidentCard({
 }: IncidentCardProps) {
   const formatDate = (dateString: string) => {
     try {
-      return format(new Date(dateString), "MM/dd HHmm");
+      return format(new Date(dateString), "MM/dd HH:mm");
     } catch {
       return "Invalid date";
     }
