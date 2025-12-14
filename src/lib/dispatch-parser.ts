@@ -72,10 +72,21 @@ function preprocessTranscript(transcript: string): string {
   processed = processed.replace(/\bQuinn\s+(\d+)\b/gi, 'Quint $1');
   processed = processed.replace(/\bWind\s+(\d+)\b/gi, 'Quint $1');
   processed = processed.replace(/\b(Quint)(\d+)\b/gi, '$1 $2');
+  processed = processed.replace(/\b(Engine)(\d+)\b/gi, '$1 $2');
+  processed = processed.replace(/\b(Truck)(\d+)\b/gi, '$1 $2');
+  processed = processed.replace(/\b(Ladder)(\d+)\b/gi, '$1 $2');
+  processed = processed.replace(/\b(Medic)(\d+)\b/gi, '$1 $2');
+  processed = processed.replace(/\b(Battalion)(\d+)\b/gi, '$1 $2');
+  processed = processed.replace(/\b(Squad)(\d+)\b/gi, '$1 $2');
+  processed = processed.replace(/\b(Rescue)(\d+)\b/gi, '$1 $2');
+  processed = processed.replace(/\b(Brush)(\d+)\b/gi, '$1 $2');
+  processed = processed.replace(/\b(ARFF)(\d+)\b/gi, '$1 $2');
+  processed = processed.replace(/\b(Ambulance)(\d+)\b/gi, '$1 $2');
   processed = processed.replace(/\bItalian\s+(\d+)\b/gi, 'Battalion $1');
   processed = processed.replace(/\bWAD\s+(\d+)\b/gi, 'Squad $1');
   processed = processed.replace(/\bAPS\s+(\d+)/gi, 'at $1');
-  processed = processed.replace(/\bF-Pack[-\s]+(\d+)\b/gi, 'F-TAC-$1');
+  processed = processed.replace(/\bF[-\s]?Pack[-\s]*(\d+)\b/gi, 'F-TAC-$1');
+  processed = processed.replace(/\bFPack[-\s]*(\d+)\b/gi, 'F-TAC-$1');
   processed = processed.replace(/\bS[-\s]?Pack[-\s]+(\d+)\b/gi, 'F-TAC-$1');
   processed = processed.replace(/\bFox\s+Alarm\b/gi, 'Box Alarm');
   processed = processed.replace(/\bFillbox\s+Alarm\b/gi, 'Stillbox Alarm');
@@ -180,8 +191,21 @@ Return valid JSON only. If something isn't mentioned, use null or empty array. e
         return unit.replace(/(\w+)\s+(\d+)-(\d+)/g, '$1 $2$3');
       })
       .filter((unit: string) => {
-        return !/^F[-\s]?Pack\s+\d+$/i.test(unit) && !/^FPack\s*\d+$/i.test(unit);
+        return !/^F[-\s]?Pack[-\s]*\d+$/i.test(unit) && !/^FPack[-\s]*\d+$/i.test(unit);
       });
+
+    const cleanedChannels = (result.channels || []).map((channel: string) => {
+      if (/^F[-\s]?Pack[-\s]*(\d+)$/i.test(channel)) {
+        return channel.replace(/^F[-\s]?Pack[-\s]*(\d+)$/i, 'F-TAC-$1');
+      }
+      if (/^FPack[-\s]*(\d+)$/i.test(channel)) {
+        return channel.replace(/^FPack[-\s]*(\d+)$/i, 'F-TAC-$1');
+      }
+      if (/^FD[-\s]*(\d+)$/i.test(channel)) {
+        return channel.replace(/^FD[-\s]*(\d+)$/i, 'F-TAC-$1');
+      }
+      return channel;
+    });
 
     const incidentType = result.incidentType === 'medical' ? 'medical' : result.incidentType === 'fire' ? 'fire' : null;
 
@@ -189,7 +213,7 @@ Return valid JSON only. If something isn't mentioned, use null or empty array. e
       callType: result.callType || null,
       incidentType: incidentType,
       units: cleanedUnits,
-      channels: result.channels || [],
+      channels: cleanedChannels,
       address: result.address || null,
       addressVariants: result.addressVariants || [],
       estimatedResolutionMinutes: result.estimatedResolutionMinutes || 60,
@@ -201,7 +225,7 @@ Return valid JSON only. If something isn't mentioned, use null or empty array. e
       callType: result.callType || null,
       incidentType: incidentType,
       units: cleanedUnits,
-      channels: result.channels || [],
+      channels: cleanedChannels,
       address: result.address || null,
       addressVariants: result.addressVariants || [],
       estimatedResolutionMinutes: result.estimatedResolutionMinutes || 60,
