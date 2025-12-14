@@ -371,6 +371,23 @@ Deno.serve(async () => {
               coordinates = await geocodeAddress(parsed.addressVariants);
             }
 
+            let incidentType = parsed.incidentType;
+            if (!incidentType) {
+              const callTypeLower = finalCallType.toLowerCase();
+              if (callTypeLower.includes('fire') || callTypeLower.includes('alarm') ||
+                  callTypeLower.includes('smoke') || callTypeLower.includes('hazmat')) {
+                incidentType = 'fire';
+              } else if (callTypeLower.includes('medical') || callTypeLower.includes('ems') ||
+                         callTypeLower.includes('cardiac') || callTypeLower.includes('stroke') ||
+                         callTypeLower.includes('chest') || callTypeLower.includes('respiratory') ||
+                         callTypeLower.includes('unconscious') || callTypeLower.includes('overdose') ||
+                         callTypeLower.includes('injury') || callTypeLower.includes('fall')) {
+                incidentType = 'medical';
+              } else {
+                incidentType = 'traffic';
+              }
+            }
+
             const incident: ProcessedIncident = {
               call_type: finalCallType,
               address: parsed.address || '?',
@@ -381,7 +398,7 @@ Deno.serve(async () => {
               audio_url: call.url,
               raw_transcript: transcript,
               estimated_resolution_minutes: parsed.estimatedResolutionMinutes,
-              incident_type: parsed.incidentType,
+              incident_type: incidentType,
               group_id: call.groupId,
               duration: call.duration,
               external_id: externalId,

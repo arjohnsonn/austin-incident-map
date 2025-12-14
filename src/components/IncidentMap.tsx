@@ -345,18 +345,21 @@ export function IncidentMap({
         (inc) => inc.traffic_report_status === "ACTIVE"
       );
       const activeFireCount = activeIncidents.filter(
-        (inc) => (inc.incidentType || "fire") === "fire"
+        (inc) => inc.incidentType === "fire"
       ).length;
       const activeMedicalCount = activeIncidents.filter(
-        (inc) => (inc.incidentType || "fire") === "medical"
+        (inc) => inc.incidentType === "medical"
       ).length;
       const activeTrafficCount = activeIncidents.filter(
-        (inc) => (inc.incidentType || "fire") === "traffic"
+        (inc) => inc.incidentType === "traffic"
       ).length;
 
-      let predominantType = "fire";
+      let predominantType: "fire" | "medical" | "traffic" = "fire";
       if (activeIncidents.length > 0) {
-        if (activeFireCount >= activeMedicalCount && activeFireCount >= activeTrafficCount) {
+        const totalTyped = activeFireCount + activeMedicalCount + activeTrafficCount;
+        if (totalTyped === 0) {
+          predominantType = "traffic";
+        } else if (activeFireCount >= activeMedicalCount && activeFireCount >= activeTrafficCount) {
           predominantType = "fire";
         } else if (activeMedicalCount >= activeFireCount && activeMedicalCount >= activeTrafficCount) {
           predominantType = "medical";
@@ -365,16 +368,19 @@ export function IncidentMap({
         }
       } else {
         const fireCount = group.filter(
-          (inc) => (inc.incidentType || "fire") === "fire"
+          (inc) => inc.incidentType === "fire"
         ).length;
         const medicalCount = group.filter(
-          (inc) => (inc.incidentType || "fire") === "medical"
+          (inc) => inc.incidentType === "medical"
         ).length;
         const trafficCount = group.filter(
-          (inc) => (inc.incidentType || "fire") === "traffic"
+          (inc) => inc.incidentType === "traffic"
         ).length;
 
-        if (fireCount >= medicalCount && fireCount >= trafficCount) {
+        const totalTyped = fireCount + medicalCount + trafficCount;
+        if (totalTyped === 0) {
+          predominantType = "traffic";
+        } else if (fireCount >= medicalCount && fireCount >= trafficCount) {
           predominantType = "fire";
         } else if (medicalCount >= fireCount && medicalCount >= trafficCount) {
           predominantType = "medical";
@@ -418,7 +424,7 @@ export function IncidentMap({
       } else {
         const incident = firstIncident;
         const isActive = incident.traffic_report_status === "ACTIVE";
-        const incidentType = incident.incidentType || "fire";
+        const incidentType = incident.incidentType;
 
         if (isActive) {
           const colors =
