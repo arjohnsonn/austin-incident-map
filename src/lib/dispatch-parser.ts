@@ -98,6 +98,7 @@ function preprocessTranscript(transcript: string): string {
   processed = processed.replace(/\bof\s+this\s+(EMS|CMS)\b/gi, 'Assist EMS');
   processed = processed.replace(/\bRogue\b(?!\s+\d)/gi, 'Stroke');
   processed = processed.replace(/\bPaul\b/gi, 'Fall');
+  processed = processed.replace(/\bVehicle\s+Buyer\b/gi, 'Vehicle Fire');
 
   processed = processed.replace(/\bActs\s+(\d+)/gi, 'at $1');
   processed = processed.replace(/\bPlate\b/gi, 'Place');
