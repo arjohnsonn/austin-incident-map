@@ -125,6 +125,24 @@ export function SettingsDialog({ incidents = [], onReplayIncident }: SettingsDia
 
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
+              <label htmlFor="show-download" className="text-sm font-medium">
+                Show download button
+              </label>
+              <p className="text-sm text-muted-foreground">
+                Show a download button to save dispatch audio files
+              </p>
+            </div>
+            <Switch
+              id="show-download"
+              checked={settings.showDownloadButton}
+              onCheckedChange={(checked) =>
+                updateSettings({ showDownloadButton: checked })
+              }
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
               <label htmlFor="show-debug-replay" className="text-sm font-medium">
                 Show debug replay
               </label>

@@ -2,7 +2,7 @@
 
 import { FireIncident } from "@/types/incident";
 import { format } from "date-fns";
-import { Play, Pause } from "lucide-react";
+import { Play, Pause, Download } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { getChannelUrl } from "@/lib/channels";
 
@@ -11,8 +11,10 @@ interface IncidentCardProps {
   isSelected: boolean;
   isNew: boolean;
   isPlaying: boolean;
+  showDownloadButton?: boolean;
   onSelect: (incident: FireIncident) => void;
   onPlayAudio: (e: React.MouseEvent, incident: FireIncident) => void;
+  onDownloadAudio?: (e: React.MouseEvent, incident: FireIncident) => void;
 }
 
 export function IncidentCard({
@@ -20,8 +22,10 @@ export function IncidentCard({
   isSelected,
   isNew,
   isPlaying,
+  showDownloadButton,
   onSelect,
   onPlayAudio,
+  onDownloadAudio,
 }: IncidentCardProps) {
   const formatDate = (dateString: string) => {
     try {
@@ -48,17 +52,28 @@ export function IncidentCard({
     >
       <div className="flex items-start gap-3">
         {incident.audioUrl && (
-          <button
-            onClick={(e) => onPlayAudio(e, incident)}
-            className="min-w-11 min-h-11 flex items-center justify-center hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-full transition-colors flex-shrink-0"
-            title="Play dispatch audio"
-          >
-            {isPlaying ? (
-              <Pause className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-            ) : (
-              <Play className="w-5 h-5 text-neutral-600 dark:text-neutral-400" />
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <button
+              onClick={(e) => onPlayAudio(e, incident)}
+              className="min-w-11 min-h-11 flex items-center justify-center hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-full transition-colors"
+              title="Play dispatch audio"
+            >
+              {isPlaying ? (
+                <Pause className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+              ) : (
+                <Play className="w-5 h-5 text-neutral-600 dark:text-neutral-400" />
+              )}
+            </button>
+            {showDownloadButton && onDownloadAudio && (
+              <button
+                onClick={(e) => onDownloadAudio(e, incident)}
+                className="min-w-11 min-h-11 flex items-center justify-center hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-full transition-colors"
+                title="Download audio"
+              >
+                <Download className="w-5 h-5 text-neutral-600 dark:text-neutral-400" />
+              </button>
             )}
-          </button>
+          </div>
         )}
 
         <div className="flex-1 min-w-0">

@@ -8,6 +8,7 @@ export interface AppSettings {
   hideIncompleteIncidents: boolean;
   hideIncidentsWithoutUnitsOrCallType: boolean;
   showDebugReplay: boolean;
+  showDownloadButton: boolean;
 }
 
 const SETTINGS_KEY = 'app_settings';
@@ -18,6 +19,7 @@ const defaultSettings: AppSettings = {
   hideIncompleteIncidents: true,
   hideIncidentsWithoutUnitsOrCallType: true,
   showDebugReplay: false,
+  showDownloadButton: false,
 };
 
 interface SettingsContextType {

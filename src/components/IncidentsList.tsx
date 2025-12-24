@@ -2,7 +2,7 @@
 
 import { useState, useMemo, memo, useRef, useEffect, useCallback } from "react";
 import { format } from "date-fns";
-import { Search, Calendar, RefreshCw, Play, Pause, Trash2, Volume2, AlertTriangle, Filter } from "lucide-react";
+import { Search, Calendar, RefreshCw, Play, Pause, Trash2, Volume2, AlertTriangle, Filter, Download } from "lucide-react";
 import { useSettings } from "@/lib/settings";
 import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { IncidentCard } from "@/components/IncidentCard";
@@ -68,6 +68,7 @@ const VirtualizedList = memo(
     selectedIncident,
     onIncidentSelect,
     autoPlayAudio,
+    showDownloadButton,
     onNewIncident,
     onAudioStateChange,
     loading,
@@ -78,6 +79,7 @@ const VirtualizedList = memo(
     selectedIncident: FireIncident | null;
     onIncidentSelect: (incident: FireIncident) => void;
     autoPlayAudio: boolean;
+    showDownloadButton: boolean;
     onNewIncident?: (incident: FireIncident, newIds: Set<string>) => void;
     onAudioStateChange?: (playing: boolean) => void;
     loading?: boolean;
@@ -202,6 +204,23 @@ const VirtualizedList = memo(
         };
       }
     }, [playingAudioId, onAudioStateChange]);
+
+    const handleDownloadAudio = useCallback((e: React.MouseEvent, incident: FireIncident) => {
+      e.stopPropagation();
+      if (!incident.audioUrl) return;
+
+      const timestamp = format(new Date(incident.published_date), "yyyy-MM-dd_HHmm");
+      const callType = incident.issue_reported?.replace(/[^a-zA-Z0-9]/g, '_') || 'dispatch';
+      const filename = `${timestamp}_${callType}.mp3`;
+
+      const link = document.createElement('a');
+      link.href = incident.audioUrl;
+      link.download = filename;
+      link.target = '_blank';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }, []);
 
     useEffect(() => {
       return () => {
@@ -330,19 +349,30 @@ const VirtualizedList = memo(
           onClick={() => onIncidentSelect(incident)}
         >
           <div className="flex items-center h-full px-2 text-xs relative">
-            <div style={{ width: columnWidths.play }} className="flex items-center justify-center flex-shrink-0">
+            <div style={{ width: columnWidths.play }} className="flex items-center justify-center flex-shrink-0 gap-0.5">
               {incident.audioUrl ? (
-                <button
-                  onClick={(e) => handlePlayAudio(e, incident)}
-                  className="p-1 hover:bg-neutral-200 dark:hover:bg-neutral-700 rounded-full transition-colors"
-                  title="Play dispatch audio"
-                >
-                  {playingAudioId === incident.traffic_report_id ? (
-                    <Pause className="w-3 h-3 text-blue-600 dark:text-blue-400" />
-                  ) : (
-                    <Play className="w-3 h-3 text-neutral-600 dark:text-neutral-400" />
+                <>
+                  <button
+                    onClick={(e) => handlePlayAudio(e, incident)}
+                    className="p-1 hover:bg-neutral-200 dark:hover:bg-neutral-700 rounded-full transition-colors"
+                    title="Play dispatch audio"
+                  >
+                    {playingAudioId === incident.traffic_report_id ? (
+                      <Pause className="w-3 h-3 text-blue-600 dark:text-blue-400" />
+                    ) : (
+                      <Play className="w-3 h-3 text-neutral-600 dark:text-neutral-400" />
+                    )}
+                  </button>
+                  {showDownloadButton && (
+                    <button
+                      onClick={(e) => handleDownloadAudio(e, incident)}
+                      className="p-1 hover:bg-neutral-200 dark:hover:bg-neutral-700 rounded-full transition-colors"
+                      title="Download audio"
+                    >
+                      <Download className="w-3 h-3 text-neutral-600 dark:text-neutral-400" />
+                    </button>
                   )}
-                </button>
+                </>
               ) : (
                 <div className="w-3 h-3" />
               )}
@@ -885,7 +915,22 @@ export function IncidentsList({
     [playingAudioId, onAudioStateChange]
   );
 
+  const handleDownloadAudio = useCallback((e: React.MouseEvent, incident: FireIncident) => {
+    e.stopPropagation();
+    if (!incident.audioUrl) return;
 
+    const timestamp = format(new Date(incident.published_date), "yyyy-MM-dd_HHmm");
+    const callType = incident.issue_reported?.replace(/[^a-zA-Z0-9]/g, '_') || 'dispatch';
+    const filename = `${timestamp}_${callType}.mp3`;
+
+    const link = document.createElement('a');
+    link.href = incident.audioUrl;
+    link.download = filename;
+    link.target = '_blank';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }, []);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -1281,8 +1326,10 @@ export function IncidentsList({
                 }
                 isNew={false}
                 isPlaying={playingAudioId === incident.traffic_report_id}
+                showDownloadButton={settings.showDownloadButton}
                 onSelect={onIncidentSelect}
                 onPlayAudio={handlePlayAudio}
+                onDownloadAudio={handleDownloadAudio}
               />
             ))}
           </div>
@@ -1293,6 +1340,7 @@ export function IncidentsList({
             selectedIncident={selectedIncident}
             onIncidentSelect={onIncidentSelect}
             autoPlayAudio={settings.autoPlayAudio}
+            showDownloadButton={settings.showDownloadButton}
             onNewIncident={onNewIncident}
             onAudioStateChange={onAudioStateChange}
             loading={loading}
