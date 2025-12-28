@@ -11,6 +11,8 @@ import { IncidentMap } from "@/components/IncidentMap";
 import { IncidentsList } from "@/components/IncidentsList";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { SettingsDialog } from "@/components/SettingsDialog";
+import { StatisticsDashboard } from "@/components/StatisticsDashboard";
+import { Tabs as HeaderTabs, TabsList as HeaderTabsList, TabsTrigger as HeaderTabsTrigger } from "@/components/ui/tabs";
 import { CallBanner } from "@/components/CallBanner";
 import { useFireIncidents } from "@/lib/api";
 import { useSettings, SettingsProvider } from "@/lib/settings";
@@ -47,6 +49,7 @@ function HomeContent() {
     FireIncident[]
   >([]);
   const [newIncidentIds, setNewIncidentIds] = useState<Set<string>>(new Set());
+  const [view, setView] = useState<'incidents' | 'statistics'>('incidents');
 
   const finalIncidents = useMemo(() => {
     const idsToFilter = new Set([
@@ -131,16 +134,22 @@ function HomeContent() {
         isAudioPlaying={isAudioPlaying}
       />
       <header className="border-b px-4 py-2 md:px-6 md:py-4">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
           <div className="min-w-0 flex-1">
             <h1 className="text-xl md:text-2xl font-bold truncate">
-              Austin Fire Department Map
+              Austin FD Live
             </h1>
             <p className="text-muted-foreground text-sm hidden md:block">
-              Real-time Austin Fire Department incidents with unit tracking
+              Real-time incident tracking
             </p>
           </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
+          <HeaderTabs value={view} onValueChange={(v) => setView(v as 'incidents' | 'statistics')} className="max-w-xs">
+            <HeaderTabsList className="grid w-full grid-cols-2">
+              <HeaderTabsTrigger value="incidents">Incidents</HeaderTabsTrigger>
+              <HeaderTabsTrigger value="statistics">Statistics</HeaderTabsTrigger>
+            </HeaderTabsList>
+          </HeaderTabs>
+          <div className="flex items-center gap-2 flex-1 justify-end">
             <SettingsDialog
               incidents={incidents}
               onReplayIncident={handleReplayIncident}
@@ -150,7 +159,9 @@ function HomeContent() {
         </div>
       </header>
 
-{isMobile ? (
+{view === 'statistics' ? (
+        <StatisticsDashboard incidents={incidents} />
+      ) : isMobile ? (
         <Tabs defaultValue="list" className="flex-1 flex flex-col">
           <TabsList className="w-full rounded-none border-b h-12">
             <TabsTrigger value="list" className="flex-1 h-full">
