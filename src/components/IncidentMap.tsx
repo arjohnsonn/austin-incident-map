@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState, useMemo } from "react";
+import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import { useTheme } from "next-themes";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { FireIncident } from "@/types/incident";
 import { getChannelUrl } from "@/lib/channels";
+import { Flame, MapPin } from "lucide-react";
 
 interface IncidentMapProps {
   incidents: FireIncident[];
@@ -31,7 +32,22 @@ export function IncidentMap({
   const markers = useRef<Map<string, maplibregl.Marker>>(new Map());
   const [mapLoaded, setMapLoaded] = useState(false);
   const [userLocation, setUserLocation] = useState<{lat: number; lng: number} | null>(null);
+  const [showHeatmap, setShowHeatmap] = useState(false);
   const { resolvedTheme } = useTheme();
+
+  const geojsonData = useMemo(() => ({
+    type: 'FeatureCollection' as const,
+    features: incidents
+      .filter(inc => inc.location?.coordinates?.[0] !== 0 && inc.location?.coordinates?.[1] !== 0)
+      .map(inc => ({
+        type: 'Feature' as const,
+        geometry: {
+          type: 'Point' as const,
+          coordinates: inc.location.coordinates
+        },
+        properties: { id: inc.traffic_report_id }
+      }))
+  }), [incidents]);
 
   useEffect(() => {
     const style = document.createElement("style");
@@ -207,6 +223,7 @@ export function IncidentMap({
 
     map.current.on("load", () => {
       setMapLoaded(true);
+
       setTimeout(() => {
         if (map.current) {
           map.current.resize();
@@ -256,11 +273,82 @@ export function IncidentMap({
     }
   }, [mapLoaded]);
 
+  // Add heatmap source and layer helper
+  const addHeatmapLayer = useCallback(() => {
+    if (!map.current) return;
+
+    if (!map.current.getSource('incidents-heat')) {
+      map.current.addSource('incidents-heat', {
+        type: 'geojson',
+        data: geojsonData
+      });
+    }
+
+    if (!map.current.getLayer('heatmap-layer')) {
+      map.current.addLayer({
+        id: 'heatmap-layer',
+        type: 'heatmap',
+        source: 'incidents-heat',
+        paint: {
+          'heatmap-weight': 1,
+          'heatmap-intensity': 0.8,
+          'heatmap-radius': 30,
+          'heatmap-opacity': 0.7,
+          'heatmap-color': [
+            'interpolate', ['linear'], ['heatmap-density'],
+            0, 'rgba(0,0,0,0)',
+            0.2, 'rgba(103,169,207,0.5)',
+            0.4, 'rgba(209,229,240,0.6)',
+            0.6, 'rgba(253,219,199,0.7)',
+            0.8, 'rgba(239,138,98,0.8)',
+            1, 'rgba(178,24,43,0.9)'
+          ]
+        },
+        layout: {
+          visibility: showHeatmap ? 'visible' : 'none'
+        }
+      });
+    }
+  }, [geojsonData, showHeatmap]);
+
   useEffect(() => {
     if (!map.current || !mapLoaded) return;
 
     map.current.setStyle(getMapStyle(resolvedTheme));
-  }, [resolvedTheme, mapLoaded]);
+
+    // Re-add heatmap layer after style change
+    map.current.once('styledata', () => {
+      addHeatmapLayer();
+    });
+  }, [resolvedTheme, mapLoaded, addHeatmapLayer]);
+
+  // Update heatmap data when incidents change
+  useEffect(() => {
+    if (!map.current || !mapLoaded) return;
+
+    const source = map.current.getSource('incidents-heat') as maplibregl.GeoJSONSource;
+    if (source) {
+      source.setData(geojsonData);
+    } else {
+      addHeatmapLayer();
+    }
+  }, [geojsonData, mapLoaded, addHeatmapLayer]);
+
+  // Toggle heatmap/markers visibility
+  useEffect(() => {
+    if (!map.current || !mapLoaded) return;
+
+    const layer = map.current.getLayer('heatmap-layer');
+    if (layer) {
+      map.current.setLayoutProperty('heatmap-layer', 'visibility', showHeatmap ? 'visible' : 'none');
+    }
+
+    markers.current.forEach((marker, key) => {
+      if (key === 'user-location') return;
+      const el = marker.getElement();
+      el.style.display = showHeatmap ? 'none' : '';
+    });
+  }, [showHeatmap, mapLoaded]);
 
   const groupIncidentsByLocation = (incidents: FireIncident[]) => {
     const groups = new Map<string, FireIncident[]>();
@@ -692,6 +780,19 @@ export function IncidentMap({
         className="absolute inset-0"
         style={{ height: "100%", width: "100%" }}
       />
+      {mapLoaded && (
+        <button
+          onClick={() => setShowHeatmap(!showHeatmap)}
+          className="absolute top-4 left-4 z-10 bg-background/90 backdrop-blur-sm border rounded-lg p-2 shadow-md hover:bg-muted transition-colors"
+          title={showHeatmap ? "Show markers" : "Show heatmap"}
+        >
+          {showHeatmap ? (
+            <MapPin className="h-5 w-5" />
+          ) : (
+            <Flame className="h-5 w-5" />
+          )}
+        </button>
+      )}
       {!mapLoaded && (
         <div className="absolute inset-0 flex items-center justify-center bg-neutral-100 z-10">
           <div className="text-lg">Loading map...</div>
