@@ -13,6 +13,13 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { StatisticsDashboard } from "@/components/StatisticsDashboard";
 import { Tabs as HeaderTabs, TabsList as HeaderTabsList, TabsTrigger as HeaderTabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Radio, ExternalLink } from "lucide-react";
 import { CallBanner } from "@/components/CallBanner";
 import { useFireIncidents } from "@/lib/api";
 import { useSettings, SettingsProvider } from "@/lib/settings";
@@ -150,6 +157,43 @@ function HomeContent() {
             </HeaderTabsList>
           </HeaderTabs>
           <div className="flex items-center gap-2 flex-1 justify-end">
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="icon">
+                  <Radio className="h-[1.2rem] w-[1.2rem]" />
+                  <span className="sr-only">View channels</span>
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-64" align="end">
+                <div className="space-y-2">
+                  <h4 className="font-medium text-sm">Linked Channels</h4>
+                  <div className="space-y-1">
+                    {[
+                      { name: 'Firecom North', url: 'https://www.broadcastify.com/calls/tg/2/1121' },
+                      { name: 'Firecom South', url: 'https://www.broadcastify.com/calls/tg/2/1123' },
+                      { name: 'F-TAC-201', url: 'https://www.broadcastify.com/calls/tg/2/1371' },
+                      { name: 'F-TAC-202', url: 'https://www.broadcastify.com/calls/tg/2/1372' },
+                      { name: 'F-TAC-203', url: 'https://www.broadcastify.com/calls/tg/2/1373' },
+                      { name: 'F-TAC-204', url: 'https://www.broadcastify.com/calls/tg/2/1374' },
+                      { name: 'F-TAC-205', url: 'https://www.broadcastify.com/calls/tg/2/1375' },
+                      { name: 'F-TAC-206', url: 'https://www.broadcastify.com/calls/tg/2/1376' },
+                      { name: 'F-TAC-207', url: 'https://www.broadcastify.com/calls/tg/2/1377' },
+                    ].map((channel) => (
+                      <a
+                        key={channel.name}
+                        href={channel.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center justify-between px-2 py-1.5 text-sm rounded hover:bg-muted transition-colors"
+                      >
+                        <span>{channel.name}</span>
+                        <ExternalLink className="h-3 w-3 text-muted-foreground" />
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
             <SettingsDialog
               incidents={incidents}
               onReplayIncident={handleReplayIncident}
