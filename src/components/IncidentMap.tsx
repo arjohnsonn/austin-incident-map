@@ -6,7 +6,8 @@ import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { FireIncident } from "@/types/incident";
 import { getChannelUrl } from "@/lib/channels";
-import { Flame, MapPin } from "lucide-react";
+import { FIRE_STATIONS } from "@/lib/fire-stations";
+import { Flame, MapPin, Building2 } from "lucide-react";
 
 interface IncidentMapProps {
   incidents: FireIncident[];
@@ -30,9 +31,11 @@ export function IncidentMap({
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const markers = useRef<Map<string, maplibregl.Marker>>(new Map());
+  const stationMarkers = useRef<Map<string, maplibregl.Marker>>(new Map());
   const [mapLoaded, setMapLoaded] = useState(false);
   const [userLocation, setUserLocation] = useState<{lat: number; lng: number} | null>(null);
   const [showHeatmap, setShowHeatmap] = useState(false);
+  const [showStations, setShowStations] = useState(false);
   const { resolvedTheme } = useTheme();
 
   const geojsonData = useMemo(() => ({
@@ -349,6 +352,63 @@ export function IncidentMap({
       el.style.display = showHeatmap ? 'none' : '';
     });
   }, [showHeatmap, mapLoaded]);
+
+  // Toggle fire station markers
+  useEffect(() => {
+    if (!map.current || !mapLoaded) return;
+
+    const isDark = resolvedTheme === 'dark';
+    const bgColor = isDark ? '#171717' : 'white';
+    const textColor = isDark ? 'white' : 'black';
+    const mutedColor = isDark ? '#9ca3af' : '#6b7280';
+
+    if (showStations) {
+      FIRE_STATIONS.forEach((station) => {
+        if (stationMarkers.current.has(station.id)) return;
+
+        const stationEl = document.createElement('div');
+        stationEl.className = 'w-3 h-3 bg-emerald-600 border-2 border-white rounded-sm cursor-pointer shadow-md';
+        stationEl.style.transform = 'rotate(45deg)';
+
+        const marker = new maplibregl.Marker({
+          element: stationEl,
+          anchor: 'center',
+        })
+          .setLngLat(station.coordinates)
+          .addTo(map.current!);
+
+        const popup = new maplibregl.Popup({
+          offset: 15,
+          closeButton: false,
+          maxWidth: '250px',
+          className: 'custom-popup',
+        })
+          .setLngLat(station.coordinates)
+          .setHTML(`
+            <div style="background: ${bgColor}; color: ${textColor}; padding: 8px; border-radius: 6px; border: 1px solid ${isDark ? '#374151' : '#e5e7eb'};">
+              <div style="font-weight: 600; font-size: 13px;">${station.name}</div>
+              <div style="font-size: 11px; color: ${mutedColor}; margin-top: 2px;">${station.address}</div>
+              <div style="font-size: 10px; color: ${station.department === 'AFD' ? '#059669' : '#8b5cf6'}; margin-top: 4px; font-weight: 500;">
+                ${station.department === 'AFD' ? 'Austin Fire Dept' : 'Travis County ESD'}
+              </div>
+            </div>
+          `);
+
+        stationEl.addEventListener('mouseenter', () => {
+          popup.addTo(map.current!);
+        });
+
+        stationEl.addEventListener('mouseleave', () => {
+          popup.remove();
+        });
+
+        stationMarkers.current.set(station.id, marker);
+      });
+    } else {
+      stationMarkers.current.forEach((marker) => marker.remove());
+      stationMarkers.current.clear();
+    }
+  }, [showStations, mapLoaded, resolvedTheme]);
 
   const groupIncidentsByLocation = (incidents: FireIncident[]) => {
     const groups = new Map<string, FireIncident[]>();
@@ -781,17 +841,26 @@ export function IncidentMap({
         style={{ height: "100%", width: "100%" }}
       />
       {mapLoaded && (
-        <button
-          onClick={() => setShowHeatmap(!showHeatmap)}
-          className="absolute top-4 left-4 z-10 bg-background/90 backdrop-blur-sm border rounded-lg p-2 shadow-md hover:bg-muted transition-colors"
-          title={showHeatmap ? "Show markers" : "Show heatmap"}
-        >
-          {showHeatmap ? (
-            <MapPin className="h-5 w-5" />
-          ) : (
-            <Flame className="h-5 w-5" />
-          )}
-        </button>
+        <div className="absolute top-4 left-4 z-10 flex gap-2">
+          <button
+            onClick={() => setShowHeatmap(!showHeatmap)}
+            className={`bg-background/90 backdrop-blur-sm border rounded-lg p-2 shadow-md hover:bg-muted transition-colors ${showHeatmap ? 'ring-2 ring-primary' : ''}`}
+            title={showHeatmap ? "Show markers" : "Show heatmap"}
+          >
+            {showHeatmap ? (
+              <MapPin className="h-5 w-5" />
+            ) : (
+              <Flame className="h-5 w-5" />
+            )}
+          </button>
+          <button
+            onClick={() => setShowStations(!showStations)}
+            className={`bg-background/90 backdrop-blur-sm border rounded-lg p-2 shadow-md hover:bg-muted transition-colors ${showStations ? 'ring-2 ring-emerald-500' : ''}`}
+            title={showStations ? "Hide fire stations" : "Show fire stations"}
+          >
+            <Building2 className={`h-5 w-5 ${showStations ? 'text-emerald-500' : ''}`} />
+          </button>
+        </div>
       )}
       {!mapLoaded && (
         <div className="absolute inset-0 flex items-center justify-center bg-neutral-100 z-10">
