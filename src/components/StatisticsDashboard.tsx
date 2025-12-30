@@ -513,7 +513,7 @@ export function StatisticsDashboard({ incidents }: StatisticsDashboardProps) {
   const [searchQuery, setSearchQuery] = useState('');
 
   const stats = useMemo(() => {
-    const byType = { fire: 0, medical: 0, traffic: 0 };
+    const byType = { fire: 0, medical: 0, workingFires: 0 };
     const byHour = Array(24).fill(0) as number[];
     const byDay = Array(7).fill(0) as number[];
 
@@ -535,9 +535,21 @@ export function StatisticsDashboard({ incidents }: StatisticsDashboardProps) {
     let newestDate: Date | null = null;
 
     incidents.forEach((inc) => {
-      if (inc.incidentType === 'fire') byType.fire++;
-      else if (inc.incidentType === 'medical') byType.medical++;
-      else if (inc.incidentType === 'traffic') byType.traffic++;
+      const callType = inc.issue_reported?.toLowerCase() || '';
+      const isWorkingFire =
+        /\b(box\s+alarm|stillbox\s+alarm)\b/i.test(callType) ||
+        /\b(1st|first|2nd|second|3rd|third|4th|fourth|5th|fifth)\s+alarm\b/i.test(callType) ||
+        /\b(structure\s+fire|building\s+fire|house\s+fire)\b/i.test(callType) ||
+        /\b(task\s+force)\b/i.test(callType) ||
+        /\b(hazmat|hazardous\s+materials)\b/i.test(callType);
+
+      if (isWorkingFire) {
+        byType.workingFires++;
+      } else if (inc.incidentType === 'fire') {
+        byType.fire++;
+      } else if (inc.incidentType === 'medical') {
+        byType.medical++;
+      }
 
       const date = new Date(inc.published_date);
       if (!isNaN(date.getTime())) {
@@ -881,9 +893,9 @@ export function StatisticsDashboard({ incidents }: StatisticsDashboardProps) {
           subtext={`${((stats.byType.medical / stats.total) * 100 || 0).toFixed(0)}% of total`}
         />
         <SummaryCard
-          label="Traffic"
-          value={stats.byType.traffic.toLocaleString()}
-          subtext={`${((stats.byType.traffic / stats.total) * 100 || 0).toFixed(0)}% of total`}
+          label="Working Fires"
+          value={stats.byType.workingFires.toLocaleString()}
+          subtext={`${((stats.byType.workingFires / stats.total) * 100 || 0).toFixed(0)}% of total`}
         />
         <SummaryCard
           label="Busiest Day"
