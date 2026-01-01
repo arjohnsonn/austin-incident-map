@@ -364,7 +364,29 @@ Deno.serve(async () => {
             console.log(`  ✓ Transcribed ${call.ts}: "${transcript.substring(0, 60)}..."`);
 
             const parsed = await parseDispatchCallWithAI(transcript);
-            const finalCallType = parsed.callType || '?';
+            let finalCallType = parsed.callType || '?';
+
+            // Validate that callType is not too generic
+            const genericCallTypes = ['fire', 'medical', 'ems', 'traffic'];
+            if (finalCallType && finalCallType !== '?' &&
+                genericCallTypes.includes(finalCallType.toLowerCase().trim())) {
+              console.log(`  ⚠️ Call type "${finalCallType}" is too generic, attempting to infer from transcript`);
+
+              // Try to get more context from transcript
+              const transcriptLower = transcript.toLowerCase();
+              if (transcriptLower.includes('alarm') || transcriptLower.includes('smoke')) {
+                finalCallType = 'Fire Alarm';
+                console.log(`  ✓ Enriched to "${finalCallType}"`);
+              } else if (transcriptLower.includes('standby')) {
+                finalCallType = finalCallType + ' Standby';
+                console.log(`  ✓ Enriched to "${finalCallType}"`);
+              } else if (transcriptLower.includes('check') || transcriptLower.includes('verify')) {
+                finalCallType = finalCallType + ' Investigation';
+                console.log(`  ✓ Enriched to "${finalCallType}"`);
+              } else {
+                console.log(`  ℹ️ Unable to make "${finalCallType}" more specific, keeping as-is`);
+              }
+            }
 
             let coordinates: [number, number] | null = null;
             if (parsed.address && parsed.addressVariants.length > 0) {

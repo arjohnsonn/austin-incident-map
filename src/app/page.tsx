@@ -19,7 +19,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Radio, ExternalLink } from "lucide-react";
+import { Radio, ExternalLink, Volume2, VolumeX } from "lucide-react";
 import { CallBanner } from "@/components/CallBanner";
 import { useFireIncidents } from "@/lib/api";
 import { useSettings, SettingsProvider } from "@/lib/settings";
@@ -38,7 +38,7 @@ function HomeContent() {
     refetch,
     resetStorage,
   } = useFireIncidents();
-  const { settings } = useSettings();
+  const { settings, updateSettings } = useSettings();
   const isMobile = useMediaQuery("(max-width: 768px)");
   const [selectedIncident, setSelectedIncident] = useState<FireIncident | null>(
     null
@@ -194,6 +194,19 @@ function HomeContent() {
                 </div>
               </PopoverContent>
             </Popover>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => updateSettings({ autoPlayAudio: !settings.autoPlayAudio })}
+              title={settings.autoPlayAudio ? "Auto-play enabled" : "Auto-play disabled"}
+            >
+              {settings.autoPlayAudio ? (
+                <Volume2 className="h-[1.2rem] w-[1.2rem]" />
+              ) : (
+                <VolumeX className="h-[1.2rem] w-[1.2rem]" />
+              )}
+              <span className="sr-only">Toggle auto-play</span>
+            </Button>
             <SettingsDialog
               incidents={incidents}
               onReplayIncident={handleReplayIncident}
