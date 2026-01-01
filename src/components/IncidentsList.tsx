@@ -3,6 +3,7 @@
 import { useState, useMemo, memo, useRef, useEffect, useCallback } from "react";
 import { format } from "date-fns";
 import { Search, Calendar, RefreshCw, Play, Pause, Trash2, Volume2, AlertTriangle, Filter, Download } from "lucide-react";
+import { ExportPopover } from "@/components/ExportPopover";
 import { useSettings } from "@/lib/settings";
 import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { IncidentCard } from "@/components/IncidentCard";
@@ -163,7 +164,7 @@ const VirtualizedList = memo(
 
     const formatDate = (dateString: string) => {
       try {
-        return format(new Date(dateString), "MM/dd HHmm");
+        return format(new Date(dateString), "MM/dd HH:mm");
       } catch {
         return "Invalid date";
       }
@@ -998,6 +999,7 @@ export function IncidentsList({
               <Trash2 className="h-3 w-3" />
               <span className="hidden md:inline">Reset</span>
             </Button>
+            <ExportPopover incidents={displayedIncidents} disabled={loading} />
             <span className="bg-neutral-200 dark:bg-neutral-700 px-2 py-1 rounded text-xs font-medium hidden md:inline">
               {displayedIncidents.length} incidents
             </span>

@@ -176,7 +176,7 @@ export function SettingsDialog({ incidents = [], onReplayIncident }: SettingsDia
                       >
                         <Play className="h-3 w-3 flex-shrink-0" />
                         <span className="text-muted-foreground font-mono flex-shrink-0">
-                          {format(new Date(incident.published_date), 'MM/dd HHmm')}
+                          {format(new Date(incident.published_date), 'MM/dd HH:mm')}
                         </span>
                         <span className="font-medium truncate flex-1">
                           {incident.issue_reported}

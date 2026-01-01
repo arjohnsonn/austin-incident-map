@@ -24,8 +24,10 @@ import { CallBanner } from "@/components/CallBanner";
 import { useFireIncidents } from "@/lib/api";
 import { useSettings, SettingsProvider } from "@/lib/settings";
 import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
+import { useKeyboardShortcuts } from "@/lib/hooks/useKeyboardShortcuts";
 import { FireIncident } from "@/types/incident";
 import { toast } from "sonner";
+import { KeyboardShortcutsDialog } from "@/components/KeyboardShortcutsDialog";
 
 function HomeContent() {
   const {
@@ -57,6 +59,7 @@ function HomeContent() {
   >([]);
   const [newIncidentIds, setNewIncidentIds] = useState<Set<string>>(new Set());
   const [view, setView] = useState<'incidents' | 'statistics'>('incidents');
+  const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
 
   const finalIncidents = useMemo(() => {
     const idsToFilter = new Set([
@@ -124,6 +127,85 @@ function HomeContent() {
       toast.success("Incidents refreshed successfully");
     }
   }, [isManualRefresh, lastUpdated]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const params = new URLSearchParams(window.location.search);
+    const incidentId = params.get('incident');
+
+    if (incidentId && incidents.length > 0) {
+      const incident = incidents.find(i => i.traffic_report_id === incidentId);
+      if (incident) {
+        setSelectedIncident(incident);
+        window.history.replaceState({}, '', window.location.pathname);
+      } else {
+        toast.error('Incident not found');
+      }
+    }
+  }, [incidents]);
+
+  useKeyboardShortcuts({
+    'refresh': () => {
+      refetch();
+      toast.success('Refreshing incidents');
+    },
+    'focus-search': () => {
+      const searchInput = document.querySelector('input[placeholder="Search incidents..."]') as HTMLInputElement;
+      if (searchInput) {
+        searchInput.focus();
+      }
+    },
+    'toggle-audio': () => {
+      const newValue = !settings.autoPlayAudio;
+      updateSettings({ autoPlayAudio: newValue });
+      toast.success(`Auto-play audio ${newValue ? 'enabled' : 'disabled'}`);
+    },
+    'select-prev': () => {
+      if (displayedIncidents.length === 0) return;
+
+      if (!selectedIncident) {
+        setSelectedIncident(displayedIncidents[0]);
+        return;
+      }
+
+      const currentIndex = displayedIncidents.findIndex(
+        i => i.traffic_report_id === selectedIncident.traffic_report_id
+      );
+
+      if (currentIndex > 0) {
+        setSelectedIncident(displayedIncidents[currentIndex - 1]);
+      }
+    },
+    'select-next': () => {
+      if (displayedIncidents.length === 0) return;
+
+      if (!selectedIncident) {
+        setSelectedIncident(displayedIncidents[0]);
+        return;
+      }
+
+      const currentIndex = displayedIncidents.findIndex(
+        i => i.traffic_report_id === selectedIncident.traffic_report_id
+      );
+
+      if (currentIndex < displayedIncidents.length - 1) {
+        setSelectedIncident(displayedIncidents[currentIndex + 1]);
+      }
+    },
+    'clear-selection': () => {
+      setSelectedIncident(null);
+    },
+    'show-help': () => {
+      setShowKeyboardHelp(true);
+    },
+    'open-export': () => {
+      toast.info('Use the Export button in the incidents list');
+    },
+    'open-settings': () => {
+      toast.info('Use the Settings button in the top right');
+    },
+  });
 
   if (error) {
     return (
@@ -282,6 +364,11 @@ function HomeContent() {
           </ResizablePanel>
         </ResizablePanelGroup>
       )}
+
+      <KeyboardShortcutsDialog
+        open={showKeyboardHelp}
+        onOpenChange={setShowKeyboardHelp}
+      />
     </div>
   );
 }

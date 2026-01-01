@@ -38,8 +38,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     try {
       const stored = localStorage.getItem(SETTINGS_KEY);
       if (stored) {
-        const parsed = JSON.parse(stored) as AppSettings;
-        setSettings(parsed);
+        const parsed = JSON.parse(stored) as Partial<AppSettings>;
+        setSettings({ ...defaultSettings, ...parsed });
       }
     } catch (error) {
       console.error('Failed to load settings:', error);
