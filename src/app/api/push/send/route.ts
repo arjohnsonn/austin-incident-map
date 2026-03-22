@@ -79,16 +79,19 @@ export async function POST(request: NextRequest) {
   try {
     const incident: IncidentPayload = await request.json();
 
-    if (!incident.location) {
-      return NextResponse.json({ sent: 0, skipped: 'not geocoded' });
+    const hasNoCallType = !incident.call_type || incident.call_type === '?' || incident.call_type === 'Nondeterminate' || incident.call_type.trim() === '';
+    const hasNoUnits = !incident.units || incident.units.length === 0;
+    const hasNoAddress = !incident.address || incident.address === '?';
+    const hasNoLocation = !incident.location;
+
+    // Match website's "Hide incomplete incidents" — skip if ALL fields are missing
+    if (hasNoCallType && hasNoUnits && hasNoAddress && hasNoLocation) {
+      return NextResponse.json({ sent: 0, skipped: 'incomplete incident' });
     }
 
-    const isIncomplete =
-      (!incident.call_type || incident.call_type === '?' || incident.call_type === 'Nondeterminate' || incident.call_type.trim() === '') &&
-      (!incident.units || incident.units.length === 0);
-
-    if (isIncomplete) {
-      return NextResponse.json({ sent: 0, skipped: 'incomplete incident' });
+    // Match website's "Hide incidents without units and call type"
+    if (hasNoCallType && hasNoUnits) {
+      return NextResponse.json({ sent: 0, skipped: 'no call type or units' });
     }
 
     const { data: subscriptions, error } = await supabase
@@ -102,7 +105,10 @@ export async function POST(request: NextRequest) {
 
     const callType = incident.call_type && incident.call_type !== '?' && incident.call_type !== 'Nondeterminate'
       ? incident.call_type : null;
-    const address = incident.address && incident.address !== '?' ? incident.address : null;
+    const hasAddress = incident.address && incident.address !== '?';
+    const address = hasAddress
+      ? (incident.location ? incident.address : `${incident.address} (?)`)
+      : null;
     const units = incident.units?.length ? incident.units.join(', ') : null;
 
     const title = callType || 'New Incident';
