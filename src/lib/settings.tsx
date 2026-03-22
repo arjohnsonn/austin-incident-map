@@ -9,6 +9,11 @@ export interface AppSettings {
   hideIncidentsWithoutUnitsOrCallType: boolean;
   showDebugReplay: boolean;
   showDownloadButton: boolean;
+  notificationsEnabled: boolean;
+  notifyAllCalls: boolean;
+  notifyCallTypes: string[];
+  notifyUnits: string[];
+  notifyIncidentTypes: ('fire' | 'medical' | 'traffic')[];
 }
 
 const SETTINGS_KEY = 'app_settings';
@@ -20,6 +25,11 @@ const defaultSettings: AppSettings = {
   hideIncidentsWithoutUnitsOrCallType: true,
   showDebugReplay: false,
   showDownloadButton: false,
+  notificationsEnabled: false,
+  notifyAllCalls: true,
+  notifyCallTypes: [],
+  notifyUnits: [],
+  notifyIncidentTypes: [],
 };
 
 interface SettingsContextType {

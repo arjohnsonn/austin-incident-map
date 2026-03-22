@@ -57,9 +57,11 @@ interface IncidentsListProps {
   lastUpdated?: Date | null;
   onRefresh?: () => void;
   onResetStorage?: () => void;
+  fullWidth?: boolean;
 }
 
 const ITEM_HEIGHT = 32;
+const ITEM_HEIGHT_FULL = 44;
 const BUFFER_SIZE = 10;
 
 const VirtualizedList = memo(
@@ -74,6 +76,7 @@ const VirtualizedList = memo(
     onAudioStateChange,
     loading,
     isInitialFetchComplete,
+    fullWidth,
   }: {
     incidents: FireIncident[];
     allIncidents: FireIncident[];
@@ -85,6 +88,7 @@ const VirtualizedList = memo(
     onAudioStateChange?: (playing: boolean) => void;
     loading?: boolean;
     isInitialFetchComplete?: boolean;
+    fullWidth?: boolean;
   }) => {
     const [scrollTop, setScrollTop] = useState(0);
     const [containerHeight, setContainerHeight] = useState(600);
@@ -95,7 +99,15 @@ const VirtualizedList = memo(
     const [newIncidentIds, setNewIncidentIds] = useState<Set<string>>(new Set());
     const prevIncidentIdsRef = useRef<Set<string>>(new Set());
     const isInitializedRef = useRef(false);
-    const [columnWidths, setColumnWidths] = useState({
+    const itemHeight = fullWidth ? ITEM_HEIGHT_FULL : ITEM_HEIGHT;
+    const [columnWidths, setColumnWidths] = useState(fullWidth ? {
+      play: 44,
+      time: 110,
+      callType: 240,
+      address: 280,
+      units: 200,
+      channels: 150,
+    } : {
       play: 32,
       time: 80,
       callType: 168,
@@ -312,11 +324,11 @@ const VirtualizedList = memo(
 
     const startIndex = Math.max(
       0,
-      Math.floor(scrollTop / ITEM_HEIGHT) - BUFFER_SIZE
+      Math.floor(scrollTop / itemHeight) - BUFFER_SIZE
     );
     const endIndex = Math.min(
       incidents.length - 1,
-      Math.ceil((scrollTop + containerHeight) / ITEM_HEIGHT) + BUFFER_SIZE
+      Math.ceil((scrollTop + containerHeight) / itemHeight) + BUFFER_SIZE
     );
 
     const visibleItems = [];
@@ -330,7 +342,7 @@ const VirtualizedList = memo(
       visibleItems.push(
         <div
           key={`${incident.traffic_report_id}-${i}`}
-          className={`absolute left-0 right-0 cursor-pointer transition-colors border-b border-neutral-300 dark:border-neutral-600 hover:bg-neutral-100 dark:hover:bg-neutral-700 min-w-[800px] ${
+          className={`absolute left-0 right-0 cursor-pointer transition-colors border-b border-neutral-300 dark:border-neutral-600 hover:bg-neutral-100 dark:hover:bg-neutral-700 ${fullWidth ? '' : 'min-w-[800px]'} ${
             isSelected
               ? "bg-blue-200 dark:bg-blue-800"
               : hasStagingInstructions
@@ -341,15 +353,15 @@ const VirtualizedList = memo(
           } ${isNew ? 'animate-new-incident' : ''}`}
           style={
             {
-              "--item-top": `${i * ITEM_HEIGHT}px`,
-              "--item-height": `${ITEM_HEIGHT}px`,
+              "--item-top": `${i * itemHeight}px`,
+              "--item-height": `${itemHeight}px`,
               top: "var(--item-top)",
               height: "var(--item-height)",
             } as React.CSSProperties
           }
           onClick={() => onIncidentSelect(incident)}
         >
-          <div className="flex items-center h-full px-2 text-xs relative">
+          <div className={`flex items-center h-full px-2 ${fullWidth ? 'text-sm' : 'text-xs'} relative`}>
             <div style={{ width: columnWidths.play }} className="flex items-center justify-center flex-shrink-0 gap-0.5">
               {incident.audioUrl ? (
                 <>
@@ -359,9 +371,9 @@ const VirtualizedList = memo(
                     title="Play dispatch audio"
                   >
                     {playingAudioId === incident.traffic_report_id ? (
-                      <Pause className="w-3 h-3 text-blue-600 dark:text-blue-400" />
+                      <Pause className={`${fullWidth ? 'w-4 h-4' : 'w-3 h-3'} text-blue-600 dark:text-blue-400`} />
                     ) : (
-                      <Play className="w-3 h-3 text-neutral-600 dark:text-neutral-400" />
+                      <Play className={`${fullWidth ? 'w-4 h-4' : 'w-3 h-3'} text-neutral-600 dark:text-neutral-400`} />
                     )}
                   </button>
                   {showDownloadButton && (
@@ -370,7 +382,7 @@ const VirtualizedList = memo(
                       className="p-1 hover:bg-neutral-200 dark:hover:bg-neutral-700 rounded-full transition-colors"
                       title="Download audio"
                     >
-                      <Download className="w-3 h-3 text-neutral-600 dark:text-neutral-400" />
+                      <Download className={`${fullWidth ? 'w-4 h-4' : 'w-3 h-3'} text-neutral-600 dark:text-neutral-400`} />
                     </button>
                   )}
                 </>
@@ -473,10 +485,10 @@ const VirtualizedList = memo(
           onScroll={handleScroll}
         >
           {/* Table Header - now inside scrollable area */}
-          <div className="bg-neutral-200 dark:bg-neutral-900 text-neutral-900 dark:text-white text-xs font-bold px-2 py-2 border-b-2 border-neutral-300 dark:border-neutral-600 sticky top-0 z-10 min-w-[800px]">
+          <div className={`bg-neutral-200 dark:bg-neutral-900 text-neutral-900 dark:text-white ${fullWidth ? 'text-sm' : 'text-xs'} font-bold px-2 ${fullWidth ? 'py-3' : 'py-2'} border-b-2 border-neutral-300 dark:border-neutral-600 sticky top-0 z-10 ${fullWidth ? '' : 'min-w-[800px]'}`}>
             <div className="flex items-center">
               <div style={{ width: columnWidths.play }} className="text-center flex-shrink-0 flex items-center justify-center">
-                <Volume2 className="w-3 h-3" />
+                <Volume2 className={fullWidth ? "w-4 h-4" : "w-3 h-3"} />
               </div>
               <div style={{ width: columnWidths.time }} className="text-center flex-shrink-0">
                 TIME
@@ -512,7 +524,7 @@ const VirtualizedList = memo(
             </div>
           </div>
 
-          <div className="relative min-w-[800px]">{visibleItems}</div>
+          <div className={`relative ${fullWidth ? '' : 'min-w-[800px]'}`} style={{ height: incidents.length * itemHeight }}>{visibleItems}</div>
         </div>
       </div>
     );
@@ -596,6 +608,7 @@ export function IncidentsList({
   lastUpdated,
   onRefresh,
   onResetStorage,
+  fullWidth,
 }: IncidentsListProps) {
   const { settings } = useSettings();
   const isMobile = useMediaQuery("(max-width: 768px)");
@@ -1347,6 +1360,7 @@ export function IncidentsList({
             onAudioStateChange={onAudioStateChange}
             loading={loading}
             isInitialFetchComplete={isInitialFetchComplete}
+            fullWidth={fullWidth}
           />
         )}
       </div>

@@ -679,6 +679,8 @@ Deno.serve(async () => {
     console.log('\n=== INSERTING INTO DATABASE ===');
     let completed = 0;
     let skipped = 0;
+    const appUrl = Deno.env.get('APP_URL');
+    const pushPromises: Promise<void>[] = [];
 
     for (const incident of deduplicated) {
       try {
@@ -692,12 +694,41 @@ Deno.serve(async () => {
         } else {
           console.log(`  ✓ Inserted incident ${incident.external_id}`);
           completed++;
+
+          if (appUrl) {
+            pushPromises.push(
+              fetch(`${appUrl}/api/push/send`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${supabaseServiceKey}`,
+                },
+                body: JSON.stringify({
+                  call_type: incident.call_type,
+                  address: incident.address,
+                  units: incident.units,
+                  incident_type: incident.incident_type,
+                  external_id: incident.external_id,
+                  audio_url: incident.audio_url,
+                }),
+              })
+                .then((res) => {
+                  if (res.ok) console.log(`  📱 Push sent for ${incident.external_id}`);
+                  else console.log(`  ⚠️ Push failed for ${incident.external_id}: ${res.status}`);
+                })
+                .catch((err) => {
+                  console.log(`  ⚠️ Push error for ${incident.external_id}:`, err.message);
+                })
+            );
+          }
         }
       } catch (error) {
         console.error(`  ✗ Error inserting incident ${incident.external_id}:`, error);
         skipped++;
       }
     }
+
+    await Promise.allSettled(pushPromises);
 
     console.log('\n=== WORKER COMPLETE ===');
     console.log('Total processed:', processedIncidents.length);
