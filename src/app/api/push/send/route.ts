@@ -33,6 +33,7 @@ interface PushSubscriptionRow {
 interface IncidentPayload {
   call_type: string;
   address: string;
+  location: string | null;
   units: string[];
   incident_type: string | null;
   external_id: string;
@@ -77,6 +78,10 @@ export async function POST(request: NextRequest) {
 
   try {
     const incident: IncidentPayload = await request.json();
+
+    if (!incident.location) {
+      return NextResponse.json({ sent: 0, skipped: 'not geocoded' });
+    }
 
     const isIncomplete =
       (!incident.call_type || incident.call_type === '?' || incident.call_type === 'Nondeterminate' || incident.call_type.trim() === '') &&

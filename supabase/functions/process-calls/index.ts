@@ -706,6 +706,7 @@ Deno.serve(async () => {
                 body: JSON.stringify({
                   call_type: incident.call_type,
                   address: incident.address,
+                  location: incident.location,
                   units: incident.units,
                   incident_type: incident.incident_type,
                   external_id: incident.external_id,
