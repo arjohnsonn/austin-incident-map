@@ -16,7 +16,8 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { useSettings } from '@/lib/settings';
-import { useNotifications, type NotificationPermissionState } from '@/lib/hooks/useNotifications';
+import { useNotifications, type NotificationPermissionState, type PushDebugInfo } from '@/lib/hooks/useNotifications';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { FireIncident } from '@/types/incident';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
@@ -147,7 +148,7 @@ function TagInput({
 
 export function SettingsDialog({ incidents = [], onReplayIncident }: SettingsDialogProps) {
   const { settings, updateSettings, isLoaded } = useSettings();
-  const { permission, isSubscribed, subscribe, unsubscribe, syncFilters } = useNotifications();
+  const { permission, isSubscribed, subscribe, unsubscribe, syncFilters, debugInfo } = useNotifications();
   const [open, setOpen] = useState(false);
   const syncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -224,7 +225,13 @@ export function SettingsDialog({ incidents = [], onReplayIncident }: SettingsDia
             Configure your incident notification preferences
           </DialogDescription>
         </DialogHeader>
-        <ScrollArea className="flex-1 -mx-6 px-6">
+        <Tabs defaultValue="settings" className="flex-1 flex flex-col min-h-0">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="settings">Settings</TabsTrigger>
+            <TabsTrigger value="debug">Debug</TabsTrigger>
+          </TabsList>
+          <TabsContent value="settings" className="flex-1 min-h-0">
+        <ScrollArea className="h-full -mx-6 px-6">
           <div className="space-y-6 py-4">
             {/* General Settings */}
             <div className="flex items-center justify-between">
@@ -492,7 +499,119 @@ export function SettingsDialog({ incidents = [], onReplayIncident }: SettingsDia
             )}
           </div>
         </ScrollArea>
+          </TabsContent>
+          <TabsContent value="debug" className="flex-1 min-h-0">
+            <DebugPanel debugInfo={debugInfo} permission={permission} isSubscribed={isSubscribed} />
+          </TabsContent>
+        </Tabs>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function DebugPanel({
+  debugInfo,
+  permission,
+  isSubscribed,
+}: {
+  debugInfo: PushDebugInfo;
+  permission: NotificationPermissionState;
+  isSubscribed: boolean;
+}) {
+  const rows: { label: string; value: string; status: 'ok' | 'warn' | 'error' | 'neutral' }[] = [
+    {
+      label: 'Service Worker Support',
+      value: debugInfo.swSupported ? 'Supported' : 'Not supported',
+      status: debugInfo.swSupported ? 'ok' : 'error',
+    },
+    {
+      label: 'Service Worker State',
+      value: debugInfo.swState === 'registered'
+        ? 'Registered'
+        : debugInfo.swState === 'failed'
+          ? `Failed: ${debugInfo.swError}`
+          : 'Pending...',
+      status: debugInfo.swState === 'registered' ? 'ok' : debugInfo.swState === 'failed' ? 'error' : 'warn',
+    },
+    {
+      label: 'PushManager Support',
+      value: debugInfo.pushManagerSupported ? 'Supported' : 'Not supported',
+      status: debugInfo.pushManagerSupported ? 'ok' : 'error',
+    },
+    {
+      label: 'Notification Permission',
+      value: permission,
+      status: permission === 'granted' ? 'ok' : permission === 'denied' ? 'error' : 'warn',
+    },
+    {
+      label: 'VAPID Key',
+      value: debugInfo.vapidKeyPresent ? 'Present' : 'Missing',
+      status: debugInfo.vapidKeyPresent ? 'ok' : 'error',
+    },
+    {
+      label: 'Push Subscription',
+      value: isSubscribed ? 'Active' : 'Not subscribed',
+      status: isSubscribed ? 'ok' : 'neutral',
+    },
+    {
+      label: 'Subscription Endpoint',
+      value: debugInfo.subscriptionEndpoint
+        ? debugInfo.subscriptionEndpoint.substring(0, 60) + '...'
+        : 'None',
+      status: debugInfo.subscriptionEndpoint ? 'ok' : 'neutral',
+    },
+    {
+      label: 'Protocol',
+      value: typeof window !== 'undefined' ? window.location.protocol : '?',
+      status: typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'ok' : 'error',
+    },
+    {
+      label: 'Display Mode',
+      value: typeof window !== 'undefined' && window.matchMedia('(display-mode: standalone)').matches
+        ? 'Standalone (PWA)'
+        : 'Browser tab',
+      status: 'neutral',
+    },
+  ];
+
+  const statusColors = {
+    ok: 'text-green-500',
+    warn: 'text-yellow-500',
+    error: 'text-red-500',
+    neutral: 'text-muted-foreground',
+  };
+
+  const statusDots = {
+    ok: 'bg-green-500',
+    warn: 'bg-yellow-500',
+    error: 'bg-red-500',
+    neutral: 'bg-muted-foreground',
+  };
+
+  return (
+    <ScrollArea className="h-full -mx-6 px-6">
+      <div className="space-y-3 py-4">
+        <p className="text-xs text-muted-foreground">
+          Push notification diagnostic info. Share this if reporting issues.
+        </p>
+        <div className="rounded-md border divide-y">
+          {rows.map((row) => (
+            <div key={row.label} className="flex items-start gap-3 px-3 py-2 text-xs">
+              <div className={`mt-1 h-2 w-2 rounded-full flex-shrink-0 ${statusDots[row.status]}`} />
+              <div className="min-w-0 flex-1">
+                <div className="font-medium">{row.label}</div>
+                <div className={`break-all ${statusColors[row.status]}`}>{row.value}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="rounded-md border p-3">
+          <div className="text-xs font-medium mb-1">User Agent</div>
+          <div className="text-xs text-muted-foreground break-all font-mono">
+            {typeof navigator !== 'undefined' ? navigator.userAgent : 'N/A'}
+          </div>
+        </div>
+      </div>
+    </ScrollArea>
   );
 }

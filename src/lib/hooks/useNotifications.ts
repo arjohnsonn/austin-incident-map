@@ -5,27 +5,75 @@ import { AppSettings } from '@/lib/settings';
 
 export type NotificationPermissionState = 'default' | 'granted' | 'denied';
 
+export interface PushDebugInfo {
+  swSupported: boolean;
+  swState: 'pending' | 'registered' | 'failed';
+  swError: string | null;
+  pushManagerSupported: boolean;
+  notificationPermission: NotificationPermissionState;
+  isSubscribed: boolean;
+  vapidKeyPresent: boolean;
+  subscriptionEndpoint: string | null;
+}
+
 export function useNotifications() {
   const [permission, setPermission] = useState<NotificationPermissionState>('default');
   const [isSubscribed, setIsSubscribed] = useState(false);
+  const [debugInfo, setDebugInfo] = useState<PushDebugInfo>({
+    swSupported: false,
+    swState: 'pending',
+    swError: null,
+    pushManagerSupported: false,
+    notificationPermission: 'default',
+    isSubscribed: false,
+    vapidKeyPresent: false,
+    subscriptionEndpoint: null,
+  });
   const swReadyPromise = useRef<Promise<ServiceWorkerRegistration> | null>(null);
   const swRegistration = useRef<ServiceWorkerRegistration | null>(null);
 
   useEffect(() => {
-    if (typeof window === 'undefined' || !('Notification' in window)) return;
-    setPermission(Notification.permission as NotificationPermissionState);
-  }, []);
+    if (typeof window === 'undefined') return;
 
-  useEffect(() => {
-    if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
+    const hasSW = 'serviceWorker' in navigator;
+    const hasNotification = 'Notification' in window;
+    const hasPush = 'PushManager' in window;
+    const perm = hasNotification ? (Notification.permission as NotificationPermissionState) : 'default';
+
+    if (hasNotification) setPermission(perm);
+
+    setDebugInfo((prev) => ({
+      ...prev,
+      swSupported: hasSW,
+      pushManagerSupported: hasPush,
+      notificationPermission: perm,
+      vapidKeyPresent: !!process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
+    }));
+
+    if (!hasSW) {
+      setDebugInfo((prev) => ({ ...prev, swState: 'failed', swError: 'Service workers not supported' }));
+      return;
+    }
 
     swReadyPromise.current = navigator.serviceWorker
       .register('/sw.js', { scope: '/', updateViaCache: 'none' })
       .then(async (reg) => {
         swRegistration.current = reg;
         const existing = await reg.pushManager.getSubscription();
-        setIsSubscribed(!!existing);
+        const subbed = !!existing;
+        setIsSubscribed(subbed);
+        setDebugInfo((prev) => ({
+          ...prev,
+          swState: 'registered',
+          isSubscribed: subbed,
+          subscriptionEndpoint: existing?.endpoint || null,
+        }));
         return reg;
+      })
+      .catch((err) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        setDebugInfo((prev) => ({ ...prev, swState: 'failed', swError: msg }));
+        throw err;
       });
   }, []);
 
@@ -165,7 +213,7 @@ export function useNotifications() {
     [isSubscribed, getRegistration]
   );
 
-  return { permission, isSubscribed, subscribe, unsubscribe, syncFilters };
+  return { permission, isSubscribed, subscribe, unsubscribe, syncFilters, debugInfo };
 }
 
 function urlBase64ToUint8Array(base64String: string): ArrayBuffer {
