@@ -78,15 +78,17 @@ export function useNotifications() {
   }, []);
 
   const getRegistration = useCallback(async (): Promise<ServiceWorkerRegistration | null> => {
-    if (swRegistration.current) return swRegistration.current;
-    if (swReadyPromise.current) {
-      try {
-        return await swReadyPromise.current;
-      } catch {
-        return null;
-      }
+    if (swRegistration.current?.active) return swRegistration.current;
+
+    if (!('serviceWorker' in navigator)) return null;
+
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      swRegistration.current = reg;
+      return reg;
+    } catch {
+      return null;
     }
-    return null;
   }, []);
 
   const subscribe = useCallback(
