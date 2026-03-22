@@ -222,7 +222,7 @@ export function SettingsDialog({ incidents = [], onReplayIncident }: SettingsDia
           <span className="sr-only">Open settings</span>
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[600px] max-h-[80vh] flex flex-col">
+      <DialogContent className="sm:max-w-[600px] max-h-[85dvh] flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle>Settings</DialogTitle>
           <DialogDescription>
@@ -235,8 +235,8 @@ export function SettingsDialog({ incidents = [], onReplayIncident }: SettingsDia
             <TabsTrigger value="debug">Debug</TabsTrigger>
             <TabsTrigger value="console">Console</TabsTrigger>
           </TabsList>
-          <TabsContent value="settings" className="flex-1 min-h-0">
-        <ScrollArea className="h-full -mx-6 px-6">
+          <TabsContent value="settings" className="flex-1 min-h-0 overflow-hidden">
+        <ScrollArea className="h-full -mx-6 px-6" style={{ maxHeight: 'calc(85dvh - 140px)' }}>
           <div className="space-y-6 py-4">
             {/* General Settings */}
             <div className="flex items-center justify-between">
