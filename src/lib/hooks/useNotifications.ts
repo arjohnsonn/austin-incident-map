@@ -131,14 +131,53 @@ export function useNotifications() {
       return null;
     }
 
+    // Try getting existing registrations first
     try {
-      log('Awaiting navigator.serviceWorker.ready...');
-      const reg = await navigator.serviceWorker.ready;
-      log(`Got ready registration. active=${reg.active?.state || 'null'}`, 'success');
-      swRegistration.current = reg;
-      return reg;
+      log('Checking existing registrations...');
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      log(`Found ${registrations.length} registration(s)`);
+
+      for (const reg of registrations) {
+        if (reg.active) {
+          log(`Found active registration: scope=${reg.scope} state=${reg.active.state}`, 'success');
+          swRegistration.current = reg;
+          return reg;
+        }
+      }
+
+      // If we have a registration but it's installing/waiting, wait for it
+      const reg = registrations[0] || swRegistration.current;
+      if (reg) {
+        const worker = reg.installing || reg.waiting;
+        if (worker) {
+          log(`SW is ${worker.state}, waiting for activation...`);
+          await new Promise<void>((resolve) => {
+            if (worker.state === 'activated') {
+              resolve();
+              return;
+            }
+            worker.addEventListener('statechange', () => {
+              log(`SW state changed to: ${worker.state}`);
+              if (worker.state === 'activated') resolve();
+            });
+            setTimeout(() => {
+              log('Activation wait timed out after 5s', 'error');
+              resolve();
+            }, 5000);
+          });
+
+          if (reg.active) {
+            log(`SW now active: ${reg.active.state}`, 'success');
+            swRegistration.current = reg;
+            return reg;
+          }
+        }
+      }
+
+      log('No active service worker found', 'error');
+      return null;
     } catch (err) {
-      log(`serviceWorker.ready failed: ${err instanceof Error ? err.message : String(err)}`, 'error');
+      log(`getRegistration failed: ${err instanceof Error ? err.message : String(err)}`, 'error');
       return null;
     }
   }, [log]);

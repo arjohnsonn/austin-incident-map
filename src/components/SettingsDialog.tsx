@@ -150,6 +150,7 @@ export function SettingsDialog({ incidents = [], onReplayIncident }: SettingsDia
   const { settings, updateSettings, isLoaded } = useSettings();
   const { permission, isSubscribed, subscribe, unsubscribe, syncFilters, debugInfo } = useNotifications();
   const [open, setOpen] = useState(false);
+  const [subscribing, setSubscribing] = useState(false);
   const syncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Sync filter changes to the server (debounced)
@@ -182,9 +183,12 @@ export function SettingsDialog({ incidents = [], onReplayIncident }: SettingsDia
   };
 
   const handleEnableNotifications = async (checked: boolean) => {
+    if (subscribing) return;
     if (checked) {
       if (permission === 'denied') return;
+      setSubscribing(true);
       const result = await subscribe(settings);
+      setSubscribing(false);
       if (result.success) {
         updateSettings({ notificationsEnabled: true });
       } else {
@@ -374,7 +378,7 @@ export function SettingsDialog({ incidents = [], onReplayIncident }: SettingsDia
                   id="notifications-enabled"
                   checked={settings.notificationsEnabled}
                   onCheckedChange={handleEnableNotifications}
-                  disabled={permission === 'denied'}
+                  disabled={permission === 'denied' || subscribing}
                 />
               </div>
 
