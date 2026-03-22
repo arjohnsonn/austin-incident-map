@@ -244,7 +244,7 @@ export function SettingsDialog({ incidents = [], onReplayIncident }: SettingsDia
             ))}
           </div>
           {tab === 'settings' && (
-        <ScrollArea className="h-full -mx-6 px-6" style={{ maxHeight: 'calc(85dvh - 140px)' }}>
+        <div className="-mx-6 px-6 overflow-y-auto" style={{ maxHeight: 'calc(85dvh - 140px)' }}>
           <div className="space-y-6 py-4">
             {/* General Settings */}
             <div className="flex items-center justify-between">
@@ -511,7 +511,7 @@ export function SettingsDialog({ incidents = [], onReplayIncident }: SettingsDia
               </>
             )}
           </div>
-        </ScrollArea>
+        </div>
           )}
           {tab === 'debug' && (
             <DebugPanel debugInfo={debugInfo} permission={permission} isSubscribed={isSubscribed} />

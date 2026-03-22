@@ -78,6 +78,14 @@ export async function POST(request: NextRequest) {
   try {
     const incident: IncidentPayload = await request.json();
 
+    const isIncomplete =
+      (!incident.call_type || incident.call_type === '?' || incident.call_type === 'Nondeterminate' || incident.call_type.trim() === '') &&
+      (!incident.units || incident.units.length === 0);
+
+    if (isIncomplete) {
+      return NextResponse.json({ sent: 0, skipped: 'incomplete incident' });
+    }
+
     const { data: subscriptions, error } = await supabase
       .from('push_subscriptions')
       .select('*');
@@ -87,11 +95,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch subscriptions' }, { status: 500 });
     }
 
-    const title = incident.call_type || 'New Incident';
-    const body = [
-      incident.address && incident.address !== '?' ? incident.address : null,
-      incident.units?.length ? `Units: ${incident.units.join(', ')}` : null,
-    ]
+    const callType = incident.call_type && incident.call_type !== '?' && incident.call_type !== 'Nondeterminate'
+      ? incident.call_type : null;
+    const address = incident.address && incident.address !== '?' ? incident.address : null;
+    const units = incident.units?.length ? incident.units.join(', ') : null;
+
+    const title = callType || 'New Incident';
+    const body = [address, units ? `Units: ${units}` : null]
       .filter(Boolean)
       .join('\n');
 
