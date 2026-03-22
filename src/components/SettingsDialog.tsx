@@ -16,7 +16,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { useSettings } from '@/lib/settings';
-import { useNotifications, type NotificationPermissionState, type PushDebugInfo } from '@/lib/hooks/useNotifications';
+import { useNotifications, type NotificationPermissionState, type PushDebugInfo, type PushDebugLog } from '@/lib/hooks/useNotifications';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { FireIncident } from '@/types/incident';
 import { format } from 'date-fns';
@@ -534,6 +534,11 @@ function DebugPanel({
       status: debugInfo.swState === 'registered' ? 'ok' : debugInfo.swState === 'failed' ? 'error' : 'warn',
     },
     {
+      label: 'SW Active State',
+      value: debugInfo.swActiveState || 'none',
+      status: debugInfo.swActiveState === 'activated' ? 'ok' : 'warn',
+    },
+    {
       label: 'PushManager Support',
       value: debugInfo.pushManagerSupported ? 'Supported' : 'Not supported',
       status: debugInfo.pushManagerSupported ? 'ok' : 'error',
@@ -609,6 +614,25 @@ function DebugPanel({
           <div className="text-xs font-medium mb-1">User Agent</div>
           <div className="text-xs text-muted-foreground break-all font-mono">
             {typeof navigator !== 'undefined' ? navigator.userAgent : 'N/A'}
+          </div>
+        </div>
+        <div>
+          <div className="text-xs font-medium mb-1">Console</div>
+          <div className="rounded-md border bg-black/50 p-2 max-h-[250px] overflow-y-auto font-mono text-[10px] leading-4 space-y-0.5">
+            {debugInfo.logs.length === 0 ? (
+              <div className="text-muted-foreground">No logs yet</div>
+            ) : (
+              debugInfo.logs.map((entry, i) => (
+                <div key={i} className="flex gap-2">
+                  <span className="text-muted-foreground flex-shrink-0">{entry.time}</span>
+                  <span className={
+                    entry.level === 'error' ? 'text-red-400' :
+                    entry.level === 'success' ? 'text-green-400' :
+                    'text-gray-300'
+                  }>{entry.message}</span>
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>
