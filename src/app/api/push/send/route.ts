@@ -8,13 +8,15 @@ const supabase = createClient(
 );
 
 let vapidConfigured = false;
-if (process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
-  webPush.setVapidDetails(
-    'mailto:admin@austinfdlive.com',
-    process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
-    process.env.VAPID_PRIVATE_KEY
-  );
+
+function ensureVapid() {
+  if (vapidConfigured) return true;
+  const pub = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+  const priv = process.env.VAPID_PRIVATE_KEY;
+  if (!pub || !priv) return false;
+  webPush.setVapidDetails('mailto:admin@austinfdlive.com', pub, priv);
   vapidConfigured = true;
+  return true;
 }
 
 interface PushSubscriptionRow {
@@ -64,7 +66,7 @@ function subscriptionMatchesIncident(sub: PushSubscriptionRow, incident: Inciden
 }
 
 export async function POST(request: NextRequest) {
-  if (!vapidConfigured) {
+  if (!ensureVapid()) {
     return NextResponse.json({ error: 'Push not configured' }, { status: 503 });
   }
 
