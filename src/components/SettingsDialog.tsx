@@ -17,7 +17,6 @@ import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { useSettings } from '@/lib/settings';
 import { useNotifications, type NotificationPermissionState, type PushDebugInfo, type PushDebugLog } from '@/lib/hooks/useNotifications';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { FireIncident } from '@/types/incident';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
@@ -150,6 +149,7 @@ export function SettingsDialog({ incidents = [], onReplayIncident }: SettingsDia
   const { settings, updateSettings, isLoaded } = useSettings();
   const { permission, isSubscribed, subscribe, unsubscribe, syncFilters, debugInfo } = useNotifications();
   const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState<'settings' | 'debug' | 'console'>('settings');
   const [subscribing, setSubscribing] = useState(false);
   const syncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -229,13 +229,21 @@ export function SettingsDialog({ incidents = [], onReplayIncident }: SettingsDia
             Configure your incident notification preferences
           </DialogDescription>
         </DialogHeader>
-        <Tabs defaultValue="settings" className="flex-1 flex flex-col min-h-0">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="settings">Settings</TabsTrigger>
-            <TabsTrigger value="debug">Debug</TabsTrigger>
-            <TabsTrigger value="console">Console</TabsTrigger>
-          </TabsList>
-          <TabsContent value="settings" className="flex-1 min-h-0 overflow-hidden">
+        <div className="flex-1 flex flex-col min-h-0">
+          <div className="grid grid-cols-3 rounded-lg bg-muted p-1 mb-2">
+            {(['settings', 'debug', 'console'] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                  tab === t ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {t.charAt(0).toUpperCase() + t.slice(1)}
+              </button>
+            ))}
+          </div>
+          {tab === 'settings' && (
         <ScrollArea className="h-full -mx-6 px-6" style={{ maxHeight: 'calc(85dvh - 140px)' }}>
           <div className="space-y-6 py-4">
             {/* General Settings */}
@@ -504,14 +512,14 @@ export function SettingsDialog({ incidents = [], onReplayIncident }: SettingsDia
             )}
           </div>
         </ScrollArea>
-          </TabsContent>
-          <TabsContent value="debug" className="flex-1 min-h-0">
+          )}
+          {tab === 'debug' && (
             <DebugPanel debugInfo={debugInfo} permission={permission} isSubscribed={isSubscribed} />
-          </TabsContent>
-          <TabsContent value="console" className="flex-1 min-h-0">
+          )}
+          {tab === 'console' && (
             <ConsolePanel logs={debugInfo.logs} />
-          </TabsContent>
-        </Tabs>
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   );
