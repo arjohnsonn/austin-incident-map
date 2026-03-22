@@ -226,9 +226,10 @@ export function SettingsDialog({ incidents = [], onReplayIncident }: SettingsDia
           </DialogDescription>
         </DialogHeader>
         <Tabs defaultValue="settings" className="flex-1 flex flex-col min-h-0">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="settings">Settings</TabsTrigger>
             <TabsTrigger value="debug">Debug</TabsTrigger>
+            <TabsTrigger value="console">Console</TabsTrigger>
           </TabsList>
           <TabsContent value="settings" className="flex-1 min-h-0">
         <ScrollArea className="h-full -mx-6 px-6">
@@ -503,6 +504,9 @@ export function SettingsDialog({ incidents = [], onReplayIncident }: SettingsDia
           <TabsContent value="debug" className="flex-1 min-h-0">
             <DebugPanel debugInfo={debugInfo} permission={permission} isSubscribed={isSubscribed} />
           </TabsContent>
+          <TabsContent value="console" className="flex-1 min-h-0">
+            <ConsolePanel logs={debugInfo.logs} />
+          </TabsContent>
         </Tabs>
       </DialogContent>
     </Dialog>
@@ -616,26 +620,35 @@ function DebugPanel({
             {typeof navigator !== 'undefined' ? navigator.userAgent : 'N/A'}
           </div>
         </div>
-        <div>
-          <div className="text-xs font-medium mb-1">Console</div>
-          <div className="rounded-md border bg-black/50 p-2 max-h-[250px] overflow-y-auto font-mono text-[10px] leading-4 space-y-0.5">
-            {debugInfo.logs.length === 0 ? (
-              <div className="text-muted-foreground">No logs yet</div>
-            ) : (
-              debugInfo.logs.map((entry, i) => (
-                <div key={i} className="flex gap-2">
-                  <span className="text-muted-foreground flex-shrink-0">{entry.time}</span>
-                  <span className={
-                    entry.level === 'error' ? 'text-red-400' :
-                    entry.level === 'success' ? 'text-green-400' :
-                    'text-gray-300'
-                  }>{entry.message}</span>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
       </div>
     </ScrollArea>
+  );
+}
+
+function ConsolePanel({ logs }: { logs: PushDebugLog[] }) {
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [logs.length]);
+
+  return (
+    <div className="rounded-md border bg-black/50 p-2 h-[400px] overflow-y-auto font-mono text-[11px] leading-5 -mx-6 mx-0">
+      {logs.length === 0 ? (
+        <div className="text-muted-foreground p-2">No logs yet. Toggle notifications to see activity.</div>
+      ) : (
+        logs.map((entry, i) => (
+          <div key={i} className="flex gap-2 px-1 hover:bg-white/5">
+            <span className="text-muted-foreground flex-shrink-0">{entry.time}</span>
+            <span className={
+              entry.level === 'error' ? 'text-red-400' :
+              entry.level === 'success' ? 'text-green-400' :
+              'text-gray-300'
+            }>{entry.message}</span>
+          </div>
+        ))
+      )}
+      <div ref={bottomRef} />
+    </div>
   );
 }
