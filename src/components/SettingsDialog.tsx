@@ -183,11 +183,11 @@ export function SettingsDialog({ incidents = [], onReplayIncident }: SettingsDia
   const handleEnableNotifications = async (checked: boolean) => {
     if (checked) {
       if (permission === 'denied') return;
-      const success = await subscribe(settings);
-      if (success) {
+      const result = await subscribe(settings);
+      if (result.success) {
         updateSettings({ notificationsEnabled: true });
       } else {
-        toast.error('Failed to enable notifications');
+        toast.error(result.error || 'Failed to enable notifications');
       }
     } else {
       await unsubscribe();

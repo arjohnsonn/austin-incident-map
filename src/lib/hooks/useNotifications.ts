@@ -8,6 +8,7 @@ export type NotificationPermissionState = 'default' | 'granted' | 'denied';
 export function useNotifications() {
   const [permission, setPermission] = useState<NotificationPermissionState>('default');
   const [isSubscribed, setIsSubscribed] = useState(false);
+  const swReadyPromise = useRef<Promise<ServiceWorkerRegistration> | null>(null);
   const swRegistration = useRef<ServiceWorkerRegistration | null>(null);
 
   useEffect(() => {
@@ -18,32 +19,59 @@ export function useNotifications() {
   useEffect(() => {
     if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
 
-    navigator.serviceWorker
+    swReadyPromise.current = navigator.serviceWorker
       .register('/sw.js', { scope: '/', updateViaCache: 'none' })
       .then(async (reg) => {
         swRegistration.current = reg;
-
         const existing = await reg.pushManager.getSubscription();
         setIsSubscribed(!!existing);
+        return reg;
       });
   }, []);
 
+  const getRegistration = useCallback(async (): Promise<ServiceWorkerRegistration | null> => {
+    if (swRegistration.current) return swRegistration.current;
+    if (swReadyPromise.current) {
+      try {
+        return await swReadyPromise.current;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }, []);
+
   const subscribe = useCallback(
-    async (settings: AppSettings): Promise<boolean> => {
-      if (!swRegistration.current) return false;
+    async (settings: AppSettings): Promise<{ success: boolean; error?: string }> => {
+      if (!('serviceWorker' in navigator)) {
+        return { success: false, error: 'Service workers not supported' };
+      }
+
+      if (!('PushManager' in window)) {
+        return { success: false, error: 'Push notifications not supported on this browser' };
+      }
+
+      const reg = await getRegistration();
+      if (!reg) {
+        return { success: false, error: 'Service worker not ready' };
+      }
 
       const result = await Notification.requestPermission();
       setPermission(result as NotificationPermissionState);
-      if (result !== 'granted') return false;
+      if (result !== 'granted') {
+        return { success: false, error: 'Notification permission denied' };
+      }
 
       try {
-        let sub = await swRegistration.current.pushManager.getSubscription();
+        let sub = await reg.pushManager.getSubscription();
 
         if (!sub) {
           const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-          if (!vapidKey) return false;
+          if (!vapidKey) {
+            return { success: false, error: 'VAPID key not configured' };
+          }
 
-          sub = await swRegistration.current.pushManager.subscribe({
+          sub = await reg.pushManager.subscribe({
             userVisibleOnly: true,
             applicationServerKey: urlBase64ToUint8Array(vapidKey),
           });
@@ -63,23 +91,27 @@ export function useNotifications() {
           }),
         });
 
-        if (!res.ok) return false;
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          return { success: false, error: data.error || `Server error (${res.status})` };
+        }
 
         setIsSubscribed(true);
-        return true;
+        return { success: true };
       } catch (err) {
         console.error('Push subscription failed:', err);
-        return false;
+        return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
       }
     },
-    []
+    [getRegistration]
   );
 
   const unsubscribe = useCallback(async (): Promise<void> => {
-    if (!swRegistration.current) return;
+    const reg = await getRegistration();
+    if (!reg) return;
 
     try {
-      const sub = await swRegistration.current.pushManager.getSubscription();
+      const sub = await reg.pushManager.getSubscription();
       if (sub) {
         const json = sub.toJSON();
         await fetch('/api/push/subscribe', {
@@ -96,13 +128,16 @@ export function useNotifications() {
     } catch (err) {
       console.error('Push unsubscribe failed:', err);
     }
-  }, []);
+  }, [getRegistration]);
 
   const syncFilters = useCallback(
     async (settings: AppSettings) => {
-      if (!isSubscribed || !swRegistration.current) return;
+      if (!isSubscribed) return;
 
-      const sub = await swRegistration.current.pushManager.getSubscription();
+      const reg = await getRegistration();
+      if (!reg) return;
+
+      const sub = await reg.pushManager.getSubscription();
       if (!sub) return;
 
       try {
@@ -127,7 +162,7 @@ export function useNotifications() {
         console.error('Failed to sync notification filters:', err);
       }
     },
-    [isSubscribed]
+    [isSubscribed, getRegistration]
   );
 
   return { permission, isSubscribed, subscribe, unsubscribe, syncFilters };
