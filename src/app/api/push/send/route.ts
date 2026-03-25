@@ -49,7 +49,7 @@ function subscriptionMatchesIncident(sub: PushSubscriptionRow, incident: Inciden
 
   if (sub.notify_call_types.length > 0 && incident.call_type) {
     const matches = sub.notify_call_types.some((ct) =>
-      incident.call_type.toLowerCase().includes(ct.toLowerCase())
+      incident.call_type.toLowerCase() === ct.toLowerCase()
     );
     if (matches) return true;
   }
@@ -57,7 +57,7 @@ function subscriptionMatchesIncident(sub: PushSubscriptionRow, incident: Inciden
   if (sub.notify_units.length > 0 && incident.units?.length > 0) {
     const matches = incident.units.some((unit) =>
       sub.notify_units.some((nu) =>
-        unit.toLowerCase().includes(nu.toLowerCase())
+        unit.toLowerCase() === nu.toLowerCase()
       )
     );
     if (matches) return true;
