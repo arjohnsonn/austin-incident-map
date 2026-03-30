@@ -115,6 +115,18 @@ function HomeContent({ mode = 'default' }: { mode?: HomeMode }) {
       setTimeout(() => {
         setReplayInjectedIncidents([incident]);
         setReplayingIncident(null);
+
+        const address = incident.address && incident.address !== '?' ? incident.address : null;
+        const units = incident.units?.length ? `Units: ${incident.units.join(', ')}` : null;
+        fetch('/api/push/replay', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: incident.issue_reported || 'New Incident',
+            body: [address, units].filter(Boolean).join('\n'),
+            tag: incident.traffic_report_id,
+          }),
+        }).catch(() => {});
       }, 3000);
 
       setTimeout(() => {
