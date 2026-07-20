@@ -11,51 +11,40 @@ interface CallBannerProps {
 
 export function CallBanner({ incident, onComplete, isAudioPlaying }: CallBannerProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [cycleCount, setCycleCount] = useState(0);
+  const [hasAudioStarted, setHasAudioStarted] = useState(false);
 
   useEffect(() => {
     if (!incident) {
       setCurrentIndex(0);
-      setCycleCount(0);
+      setHasAudioStarted(false);
       return;
     }
 
-    const items = [
-      (incident.issue_reported === '?' ? 'Nondeterminate' : incident.issue_reported) || 'Unknown Call Type',
-      (incident.address === '?' ? 'Nondeterminate' : incident.address) || 'Unknown Address',
-      incident.units?.join(', ') || 'No Units',
-      incident.channels?.join(', ') || 'No Channel',
-    ];
-
     const interval = setInterval(() => {
-      setCurrentIndex((prev) => {
-        const next = prev + 1;
-        if (next >= items.length) {
-          setCycleCount((count) => {
-            const newCount = count + 1;
-            if (newCount >= 3 && !isAudioPlaying) {
-              setTimeout(() => {
-                onComplete();
-              }, 3000);
-            }
-            return newCount;
-          });
-          return 0;
-        }
-        return next;
-      });
+      setCurrentIndex((prev) => (prev + 1) % 4);
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [incident, onComplete, isAudioPlaying]);
+  }, [incident]);
 
   useEffect(() => {
-    if (!isAudioPlaying && cycleCount >= 3 && incident) {
+    if (isAudioPlaying) setHasAudioStarted(true);
+  }, [isAudioPlaying]);
+
+  useEffect(() => {
+    if (incident && hasAudioStarted && !isAudioPlaying) {
       onComplete();
     }
-  }, [isAudioPlaying, cycleCount, incident, onComplete]);
+  }, [incident, hasAudioStarted, isAudioPlaying, onComplete]);
 
-  if (!incident || (cycleCount >= 3 && !isAudioPlaying)) return null;
+  // Fallback dismissal if audio never starts (auto-play disabled/blocked or no audio)
+  useEffect(() => {
+    if (!incident || hasAudioStarted) return;
+    const timeout = setTimeout(onComplete, 12000);
+    return () => clearTimeout(timeout);
+  }, [incident, hasAudioStarted, onComplete]);
+
+  if (!incident) return null;
 
   const items = [
     { label: 'CALL TYPE', value: (incident.issue_reported === '?' ? 'Nondeterminate' : incident.issue_reported) || 'Unknown Call Type' },

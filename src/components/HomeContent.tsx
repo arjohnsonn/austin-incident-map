@@ -19,11 +19,12 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Radio, ExternalLink, Volume2, VolumeX } from "lucide-react";
+import { Radio, ExternalLink, Volume2, VolumeX, Maximize, Minimize } from "lucide-react";
 import { CallBanner } from "@/components/CallBanner";
 import { useFireIncidents, removeUnitsFromOlderIncidents } from "@/lib/api";
 import { useSettings, SettingsProvider } from "@/lib/settings";
 import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
+import { useFullscreen } from "@/lib/hooks/useFullscreen";
 import { useKeyboardShortcuts } from "@/lib/hooks/useKeyboardShortcuts";
 import { FireIncident } from "@/types/incident";
 import { toast } from "sonner";
@@ -44,6 +45,7 @@ function HomeContent({ mode = 'default' }: { mode?: HomeMode }) {
   } = useFireIncidents();
   const { settings, updateSettings } = useSettings();
   const isMobile = useMediaQuery("(max-width: 768px)");
+  const { isFullscreen, toggleFullscreen } = useFullscreen();
   const [selectedIncident, setSelectedIncident] = useState<FireIncident | null>(
     null
   );
@@ -100,6 +102,10 @@ function HomeContent({ mode = 'default' }: { mode?: HomeMode }) {
 
   const handleAudioStateChange = useCallback((playing: boolean) => {
     setIsAudioPlaying(playing);
+  }, []);
+
+  const handleBannerComplete = useCallback(() => {
+    setBannerIncident(null);
   }, []);
 
   const handleReplayIncident = useCallback(
@@ -200,6 +206,9 @@ function HomeContent({ mode = 'default' }: { mode?: HomeMode }) {
       if (searchInput) {
         searchInput.focus();
       }
+    },
+    'toggle-fullscreen': () => {
+      toggleFullscreen();
     },
     'toggle-audio': () => {
       const newValue = !settings.autoPlayAudio;
@@ -330,6 +339,19 @@ function HomeContent({ mode = 'default' }: { mode?: HomeMode }) {
             )}
             <span className="sr-only">Toggle auto-play</span>
           </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={toggleFullscreen}
+            title={isFullscreen ? "Exit full screen" : "Enter full screen"}
+          >
+            {isFullscreen ? (
+              <Minimize className="h-[1.2rem] w-[1.2rem]" />
+            ) : (
+              <Maximize className="h-[1.2rem] w-[1.2rem]" />
+            )}
+            <span className="sr-only">Toggle full screen</span>
+          </Button>
           <SettingsDialog
             incidents={finalIncidents}
             onReplayIncident={handleReplayIncident}
@@ -454,7 +476,7 @@ function HomeContent({ mode = 'default' }: { mode?: HomeMode }) {
     <div className="h-screen flex flex-col">
       <CallBanner
         incident={bannerIncident}
-        onComplete={() => setBannerIncident(null)}
+        onComplete={handleBannerComplete}
         isAudioPlaying={isAudioPlaying}
       />
       {renderHeader()}

@@ -13,6 +13,7 @@ export interface KeyboardShortcut {
 export const KEYBOARD_SHORTCUTS: KeyboardShortcut[] = [
   { key: 'r', description: 'Refresh incidents', action: 'refresh' },
   { key: 'f', description: 'Focus search bar', action: 'focus-search' },
+  { key: 'f', description: 'Toggle full screen', action: 'toggle-fullscreen', modifiers: { shift: true } },
   { key: ' ', description: 'Toggle auto-play audio', action: 'toggle-audio' },
   { key: 'ArrowUp', description: 'Select previous incident', action: 'select-prev' },
   { key: 'ArrowDown', description: 'Select next incident', action: 'select-next' },
