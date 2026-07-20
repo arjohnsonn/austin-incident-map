@@ -5,6 +5,11 @@ import { parseDispatchCallWithAI, quickEstimateResolution } from '../_shared/dis
 const BROADCASTIFY_LIVE_ENDPOINT = 'https://api.bcfy.io/calls/v1/live/';
 const GROUP_ID = '2-1147';
 
+const STALE_AFTER_SECONDS = 3600;
+// Past that, reach back as far as the live window allows and take whatever it
+// still holds — in practice ~15 min, since the endpoint caps its own history.
+const BACKFILL_LOOKBACK_SECONDS = 86400;
+
 interface BroadcastifyCall {
   groupId: string;
   ts: number;
@@ -257,13 +262,24 @@ Deno.serve(async () => {
     const lastPos = parseInt(stateData.value, 10);
     console.log('Current lastPos:', lastPos, new Date(lastPos * 1000).toISOString());
 
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    let resumePos = lastPos;
+
+    if (lastPos > 0 && nowSeconds - lastPos > STALE_AFTER_SECONDS) {
+      const staleDays = ((nowSeconds - lastPos) / 86400).toFixed(1);
+      resumePos = nowSeconds - BACKFILL_LOOKBACK_SECONDS;
+      console.log(
+        `⏭️ lastPos is ${staleDays} days stale — backfilling whatever the live window still holds, from ${new Date(resumePos * 1000).toISOString()}`
+      );
+    }
+
     const auth = await authenticateUser();
     const jwt = await generateBroadcastifyJWT(auth.uid, auth.token);
 
     const isFirstRun = lastPos === 0;
     const url = isFirstRun
       ? `${BROADCASTIFY_LIVE_ENDPOINT}?groups=${GROUP_ID}&init=1`
-      : `${BROADCASTIFY_LIVE_ENDPOINT}?groups=${GROUP_ID}&pos=${lastPos}`;
+      : `${BROADCASTIFY_LIVE_ENDPOINT}?groups=${GROUP_ID}&pos=${resumePos}`;
 
     console.log(isFirstRun ? '🔄 INITIAL RUN - Fetching last 25 calls with init=1' : '📡 Incremental update with pos parameter');
     console.log('Fetching live calls from:', url);
@@ -276,21 +292,34 @@ Deno.serve(async () => {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Broadcastify error response:', errorText);
-      throw new Error(`Broadcastify API error: ${response.statusText}`);
+      console.error('Broadcastify error response:', response.status, errorText);
+      if (response.status === 402) {
+        throw new Error(
+          'Broadcastify prepaid balance depleted (402). Top up at https://bcfy.io/dev/overview'
+        );
+      }
+      if (response.status === 401) {
+        throw new Error(
+          'Broadcastify API key rejected (401). Check plan status at https://bcfy.io/dev/overview'
+        );
+      }
+      throw new Error(`Broadcastify API error: ${response.status} ${response.statusText}`);
     }
 
     const data: BroadcastifyLiveResponse = await response.json();
     console.log('Calls count:', data.calls.length);
     console.log('New lastPos:', data.lastPos);
 
-    await supabase
-      .from('worker_state')
-      .update({ value: data.lastPos.toString(), updated_at: new Date().toISOString() })
-      .eq('key', 'lastPos');
+    // Advanced only after processing succeeds, so a timeout retries instead of losing calls.
+    const updateLastPos = () =>
+      supabase
+        .from('worker_state')
+        .update({ value: data.lastPos.toString(), updated_at: new Date().toISOString() })
+        .eq('key', 'lastPos');
 
     if (data.calls.length === 0) {
       console.log('No new calls');
+      await updateLastPos();
       return new Response(JSON.stringify({ processed: 0, skipped: 0 }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
@@ -730,6 +759,8 @@ Deno.serve(async () => {
     }
 
     await Promise.allSettled(pushPromises);
+
+    await updateLastPos();
 
     console.log('\n=== WORKER COMPLETE ===');
     console.log('Total processed:', processedIncidents.length);

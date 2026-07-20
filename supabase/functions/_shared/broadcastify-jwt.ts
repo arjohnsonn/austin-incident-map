@@ -95,8 +95,14 @@ export async function authenticateUser(): Promise<AuthenticatedUser> {
     return cachedAuth;
   }
 
-  const username = 'motion42069';
-  const password = 'ef7a0n5a5ml';
+  const username = Deno.env.get('BROADCASTIFY_USERNAME');
+  const password = Deno.env.get('BROADCASTIFY_PASSWORD');
+
+  if (!username || !password) {
+    throw new Error(
+      'Broadcastify credentials not configured. Need BROADCASTIFY_USERNAME and BROADCASTIFY_PASSWORD'
+    );
+  }
 
   const authJWT = await generateBroadcastifyJWT();
 
@@ -120,7 +126,14 @@ export async function authenticateUser(): Promise<AuthenticatedUser> {
       response.status,
       errorText
     );
-    throw new Error(`Authentication failed: ${response.statusText}`);
+    if (response.status === 401) {
+      throw new Error(
+        'Broadcastify API key rejected (401). The key is inactive — accept the Terms and fund the prepaid balance at https://bcfy.io/dev/overview'
+      );
+    }
+    throw new Error(
+      `Authentication failed: ${response.status} ${response.statusText}`
+    );
   }
 
   const data: AuthenticatedUser = await response.json();

@@ -331,7 +331,7 @@ function HomeContent({ mode = 'default' }: { mode?: HomeMode }) {
             <span className="sr-only">Toggle auto-play</span>
           </Button>
           <SettingsDialog
-            incidents={incidents}
+            incidents={finalIncidents}
             onReplayIncident={handleReplayIncident}
           />
           <ThemeToggle />

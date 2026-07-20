@@ -222,15 +222,15 @@ export function SettingsDialog({ incidents = [], onReplayIncident }: SettingsDia
           <span className="sr-only">Open settings</span>
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[600px] max-h-[85dvh] flex flex-col overflow-hidden">
-        <DialogHeader>
-          <DialogTitle>Settings</DialogTitle>
-          <DialogDescription>
-            Configure your incident notification preferences
-          </DialogDescription>
-        </DialogHeader>
-        <div className="flex-1 flex flex-col min-h-0">
-          <div className="grid grid-cols-3 rounded-lg bg-muted p-1 mb-2">
+      <DialogContent className="sm:max-w-[600px] max-h-[85dvh] flex flex-col overflow-hidden p-0">
+        <div className="px-6 pt-6 pb-2">
+          <DialogHeader>
+            <DialogTitle>Settings</DialogTitle>
+            <DialogDescription>
+              Configure your incident notification preferences
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-3 rounded-lg bg-muted p-1 mt-4">
             {(['settings', 'debug', 'console'] as const).map((t) => (
               <button
                 key={t}
@@ -243,8 +243,10 @@ export function SettingsDialog({ incidents = [], onReplayIncident }: SettingsDia
               </button>
             ))}
           </div>
+        </div>
+        <div className="flex-1 overflow-y-auto px-6 pb-6">
           {tab === 'settings' && (
-        <div className="-mx-6 px-6 overflow-y-auto" style={{ maxHeight: 'calc(85dvh - 140px)' }}>
+        <div>
           <div className="space-y-6 py-4">
             {/* General Settings */}
             <div className="flex items-center justify-between">
@@ -521,6 +523,7 @@ export function SettingsDialog({ incidents = [], onReplayIncident }: SettingsDia
           )}
         </div>
       </DialogContent>
+
     </Dialog>
   );
 }
